@@ -1,0 +1,30 @@
+{
+  "name": "chessmates-leaderboard",
+  "version": "1.0.0",
+  "description": "Live Elo leaderboard for a weekly chess club",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RizakHassan/chessmatess.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RizakHassan/chessmatess/issues"
+  },
+  "homepage": "https://github.com/RizakHassan/chessmatess#readme",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}

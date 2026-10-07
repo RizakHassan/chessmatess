@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chessmates Leaderboard</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { overflow-x: hidden; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 60px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand .logo { font-size: 44px; line-height: 1; filter: drop-shadow(0 0 14px rgba(245,196,81,.45)); }
+  .brand h1 { margin: 0; font-size: clamp(26px, 3.2vw, 40px); letter-spacing: -0.02em; }
+  .brand .sub { color: var(--muted); font-size: 15px; margin-top: 2px; }
+
+  .tabs { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+  .tabs button { border: 0; background: transparent; padding: 10px 22px; border-radius: 999px; cursor: pointer; color: var(--muted); font-weight: 600; }
+  .tabs button.active { background: var(--accent); color: #1a1406; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .cols, .row { display: grid; align-items: center; gap: 12px; }
+  .tonight .cols, .tonight .row { grid-template-columns: 64px 1fr 150px 110px 120px; }
+  .month .cols, .month .row { grid-template-columns: 64px 1fr 130px 150px 110px; }
+  .cols { padding: 0 20px 10px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .12em; }
+  .cols .r, .row .r { text-align: right; }
+  .cols .c, .row .c { text-align: center; }
+
+  .board { position: relative; display: flex; flex-direction: column; gap: 10px; }
+  .row {
+    position: relative;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    font-size: clamp(18px, 2.1vw, 26px);
+    will-change: transform;
+  }
+  .row .rank { font-weight: 800; font-size: 1.15em; color: var(--muted); font-family: var(--mono); }
+  .row .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .wdl { font-family: var(--mono); color: var(--muted); }
+  .row .wdl b { color: var(--text); font-weight: 700; }
+  .row .elo { font-family: var(--mono); font-weight: 700; }
+  .row .delta { font-family: var(--mono); font-weight: 700; font-size: .85em; }
+  .row .bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: transparent; }
+
+  .row.p1 .bar { background: var(--gold); box-shadow: 0 0 14px var(--gold); }
+  .row.p2 .bar { background: var(--silver); }
+  .row.p3 .bar { background: var(--bronze); }
+  .row.p1 .rank { color: var(--gold); }
+  .row.p2 .rank { color: var(--silver); }
+  .row.p3 .rank { color: var(--bronze); }
+  .row.p1 { border-color: rgba(245,196,81,.45); }
+
+  /* glow flashes on rating change */
+  @keyframes glowUp {
+    0%   { box-shadow: 0 0 0 0 rgba(61,220,132,0); border-color: var(--line); }
+    15%  { box-shadow: 0 0 32px 4px rgba(61,220,132,.55), inset 0 0 22px rgba(61,220,132,.18); border-color: var(--up); }
+    100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); }
+  }
+  @keyframes glowDown {
+    0%   { box-shadow: 0 0 0 0 rgba(255,92,108,0); border-color: var(--line); }
+    15%  { box-shadow: 0 0 32px 4px rgba(255,92,108,.5), inset 0 0 22px rgba(255,92,108,.16); border-color: var(--down); }
+    100% { box-shadow: 0 0 0 0 rgba(255,92,108,0); }
+  }
+  @keyframes glowNew {
+    0%   { box-shadow: 0 0 32px 4px rgba(245,196,81,.5); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { box-shadow: 0 0 0 0 rgba(245,196,81,0); opacity: 1; }
+  }
+  .row.flash-up   { animation: glowUp 2.2s ease-out; }
+  .row.flash-down { animation: glowDown 2.2s ease-out; }
+  .row.flash-new  { animation: glowNew 1.6s ease-out; }
+  .row.flash-up .elo { color: var(--up); transition: color 2s; }
+  .row.flash-down .elo { color: var(--down); transition: color 2s; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 20px; }
+  .empty a { font-family: var(--mono); }
+
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin: 18px 4px 0; gap: 12px; flex-wrap: wrap; }
+
+  /* "This Month" — framed for an Instagram screenshot */
+  .month .card {
+    max-width: 920px; margin: 0 auto;
+    background: radial-gradient(800px 400px at 50% -120px, rgba(245,196,81,.10), transparent 70%), var(--bg-2);
+    border: 1px solid var(--line); border-radius: 22px; padding: 34px 30px 26px;
+  }
+  .month .card-head { text-align: center; margin-bottom: 24px; }
+  .month .card-head .kicker { color: var(--accent); letter-spacing: .3em; text-transform: uppercase; font-size: 13px; font-weight: 700; }
+  .month .card-head h2 { margin: 6px 0 4px; font-size: clamp(28px, 3.6vw, 44px); letter-spacing: -0.02em; }
+  .month .card-head .sub { color: var(--muted); }
+  .month .row { font-size: clamp(17px, 1.9vw, 23px); padding: 12px 18px; }
+  .month .card-foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; letter-spacing: .08em; }
+
+  /* latest result banner */
+  .ticker {
+    position: fixed; left: 50%; top: 18px; transform: translate(-50%, -140%);
+    background: var(--panel-2); border: 1px solid var(--accent); border-radius: 999px;
+    padding: 10px 22px; font-size: 20px; font-weight: 600; z-index: 20;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 24px rgba(245,196,81,.25);
+    transition: transform .45s cubic-bezier(.2,.9,.3,1.2); white-space: nowrap;
+  }
+  .ticker.show { transform: translate(-50%, 0); }
+
+  .conn { position: fixed; right: 12px; bottom: 10px; font-size: 12px; color: var(--muted); }
+  .conn::before { content: "●"; margin-right: 6px; color: var(--up); }
+  .conn.off::before { color: var(--down); }
+
+  body.clean header, body.clean .meta, body.clean .conn { display: none; }
+  body.clean .wrap { padding-top: 40px; }
+
+  @media (max-width: 720px) {
+    .wrap { padding: 16px 16px 40px; }
+    .tonight .cols, .tonight .row { grid-template-columns: 34px 1fr 90px 64px; }
+    .month .cols, .month .row { grid-template-columns: 34px 1fr 64px 90px; }
+    .tonight .cols > :nth-child(5), .tonight .row > .delta { display: none; }
+    .month .cols > :nth-child(5), .month .row > .delta { display: none; }
+    .row { padding: 12px 14px; font-size: 16px; }
+    .month .card { padding: 22px 12px; }
+    .ticker { font-size: 15px; white-space: normal; width: calc(100vw - 32px); text-align: center; border-radius: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="ticker" id="ticker"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">♞</div>
+      <div>
+        <h1>Chessmates</h1>
+        <div class="sub" id="sessionLabel">Live leaderboard</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button data-tab="tonight" class="active">Tonight</button>
+      <button data-tab="month">This Month</button>
+    </nav>
+  </header>
+
+  <section class="view tonight active" id="view-tonight">
+    <div class="cols"><div>#</div><div>Player</div><div class="c">W-D-L</div><div class="r">Elo</div><div class="r">Tonight</div></div>
+    <div class="board" id="board-tonight"></div>
+    <div class="meta"><span id="tonightMeta"></span><span>Ranked by wins tonight · Elo breaks ties</span></div>
+  </section>
+
+  <section class="view month" id="view-month">
+    <div class="card">
+      <div class="card-head">
+        <div class="kicker">♞ Chessmates Club</div>
+        <h2 id="monthTitle">This Month</h2>
+        <div class="sub" id="monthSub"></div>
+      </div>
+      <div class="cols"><div>#</div><div>Player</div><div class="r">Elo</div><div class="c">W-D-L</div><div class="r">+/−</div></div>
+      <div class="board" id="board-month"></div>
+      <div class="card-foot">MONDAY NIGHTS · ALL LEVELS WELCOME</div>
+    </div>
+  </section>
+</div>
+<div class="conn" id="conn">live</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  let tab = params.get('tab') === 'month' ? 'month' : 'tonight';
+  const rotateSecs = Number(params.get('rotate')) || 0;
+  if (params.has('clean')) document.body.classList.add('clean');
+
+  const prevElo = new Map();   // player id -> last seen elo (for glow direction)
+  let lastGameId = null;
+  let firstRender = true;
+
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
+  const cls = n => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat');
+  const wdl = r => `<b>${r.w}</b>-${r.d}-${r.l}`;
+
+  function setTab(t) {
+    tab = t;
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t));
+  }
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  document.addEventListener('keydown', e => {
+    if (e.key === '1') setTab('tonight');
+    if (e.key === '2') setTab('month');
+    if (e.key.toLowerCase() === 'c') document.body.classList.toggle('clean');
+  });
+  setTab(tab);
+  if (rotateSecs) setInterval(() => setTab(tab === 'tonight' ? 'month' : 'tonight'), rotateSecs * 1000);
+
+  const rowHtml = {
+    tonight: (r, i) => `
+      <div class="bar"></div>
+      <div class="rank">${i + 1}</div>
+      <div class="name">${esc(r.name)}</div>
+      <div class="wdl c">${wdl(r)}</div>
+      <div class="elo r">${r.elo}</div>
+      <div class="delta r ${cls(r.delta)}">${signed(r.delta)}</div>`,
+    month: (r, i) => `
+      <div class="bar"></div>
+      <div class="rank">${i + 1}</div>
+      <div class="name">${esc(r.name)}</div>
+      <div class="elo r">${r.elo}</div>
+      <div class="wdl c">${wdl(r)}</div>
+      <div class="delta r ${cls(r.delta)}">${signed(r.delta)}</div>`,
+  };
+
+  // FLIP: measure First positions, apply Last layout, Invert with transforms, Play transition.
+  function renderBoard(el, rows, kind, emptyHtml) {
+    if (!rows.length) { el.innerHTML = `<div class="empty">${emptyHtml}</div>`; return; }
+    el.querySelector('.empty')?.remove();
+
+    const first = new Map();
+    el.querySelectorAll('.row').forEach(n => first.set(n.dataset.id, n.getBoundingClientRect().top));
+
+    const keep = new Set(rows.map(r => String(r.id)));
+    el.querySelectorAll('.row').forEach(n => { if (!keep.has(n.dataset.id)) n.remove(); });
+
+    rows.forEach((r, i) => {
+      const id = String(r.id);
+      let node = el.querySelector(`.row[data-id="${id}"]`);
+      const isNew = !node;
+      if (isNew) { node = document.createElement('div'); node.className = 'row'; node.dataset.id = id; }
+      node.innerHTML = rowHtml[kind](r, i);
+      node.classList.remove('p1', 'p2', 'p3');
+      if (i < 3) node.classList.add('p' + (i + 1));
+      el.appendChild(node); // appending in order performs the reorder
+
+      const before = prevElo.get(r.id);
+      let flash = null;
+      if (isNew && !firstRender) flash = 'flash-new';
+      if (before !== undefined && before !== r.elo) flash = r.elo > before ? 'flash-up' : 'flash-down';
+      if (flash) {
+        node.classList.remove('flash-up', 'flash-down', 'flash-new');
+        void node.offsetWidth;
+        node.classList.add(flash);
+        node.addEventListener('animationend', () => node.classList.remove(flash), { once: true });
+      }
+    });
+
+    el.querySelectorAll('.row').forEach(n => {
+      const was = first.get(n.dataset.id);
+      if (was === undefined) return;
+      const dy = was - n.getBoundingClientRect().top;
+      if (!dy) return;
+      n.style.transition = 'none';
+      n.style.transform = `translateY(${dy}px)`;
+      n.style.zIndex = dy > 0 ? 2 : 1; // risers slide over fallers
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        n.style.transition = 'transform 900ms cubic-bezier(.22,1,.36,1)';
+        n.style.transform = '';
+        n.addEventListener('transitionend', () => { n.style.zIndex = ''; n.style.transition = ''; }, { once: true });
+      }));
+    });
+  }
+
+  // Inactive tab has display:none so positions are 0 — render it without FLIP and let it settle.
+  function render(state) {
+    const t = state.tonight, m = state.month;
+    document.getElementById('sessionLabel').textContent = t.session ? t.session.label : 'No session yet';
+    document.getElementById('tonightMeta').textContent = t.gameCount ? `${t.gameCount} game${t.gameCount === 1 ? '' : 's'} tonight` : '';
+    document.getElementById('monthTitle').textContent = m.label;
+    document.getElementById('monthSub').textContent = `${m.rows.length} players · ${m.gameCount} games`;
+
+    renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
+      `No games yet tonight.<br>Scan the QR code or open <a href="/log">/log</a> to record one.`);
+    renderBoard(document.getElementById('board-month'), m.rows, 'month', 'No games this month yet.');
+
+    for (const p of state.players) prevElo.set(p.id, p.elo);
+
+    const g = state.latest;
+    if (g && lastGameId !== null && g.id > lastGameId) showTicker(g);
+    lastGameId = g ? g.id : 0;
+    firstRender = false;
+  }
+
+  let tickerTimer;
+  function showTicker(g) {
+    const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
+    const a = `${esc(g.p1_name)} <span class="${cls(d1)}">${signed(d1)}</span>`;
+    const b = `${esc(g.p2_name)} <span class="${cls(d2)}">${signed(d2)}</span>`;
+    const txt = g.result === 1 ? `${a} beat ${b}` : g.result === 0 ? `${b} beat ${a}` : `${a} drew with ${b}`;
+    const el = document.getElementById('ticker');
+    el.innerHTML = '♟ ' + txt;
+    el.classList.add('show');
+    clearTimeout(tickerTimer);
+    tickerTimer = setTimeout(() => el.classList.remove('show'), 5000);
+  }
+
+  const socket = io();
+  const conn = document.getElementById('conn');
+  socket.on('connect', () => { conn.classList.remove('off'); conn.textContent = 'live'; });
+  socket.on('disconnect', () => { conn.classList.add('off'); conn.textContent = 'reconnecting…'; });
+  socket.on('state', render);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chessmates Admin</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  header h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
+  header nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  header nav a { text-decoration: none; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { margin: 0 0 12px; font-size: 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .inline { display: flex; gap: 8px; margin-bottom: 12px; }
+  .inline .input { flex: 1; min-width: 0; padding: 10px 12px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td.act { text-align: right; white-space: nowrap; }
+  td.act .btn + .btn { margin-left: 4px; }
+  tr.removed td { opacity: .5; }
+  .scroll { max-height: 520px; overflow-y: auto; }
+  .name-edit { padding: 6px 8px; font-size: 15px; }
+  .res { font-weight: 700; }
+  .session-tag { font-size: 12px; color: var(--muted); }
+  label.toggle { font-size: 14px; color: var(--muted); font-weight: 400; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>♞ Admin</h1>
+    <nav>
+      <a class="btn small" href="/display" target="_blank">Display ↗</a>
+      <a class="btn small" href="/log" target="_blank">Log page ↗</a>
+      <a class="btn small" href="/qr" target="_blank">Print QR ↗</a>
+    </nav>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Session</h2>
+      <div id="sessionInfo" class="muted" style="margin-bottom:12px"></div>
+      <div class="inline">
+        <input class="input" id="sessionLabel" placeholder="Label (optional, defaults to today's date)">
+        <button class="btn primary" id="newSession">Start new session</button>
+      </div>
+      <div class="muted">Start one at the beginning of each Monday night. “Tonight” on the display shows only games from the current session. Elo never resets.</div>
+    </section>
+
+    <section class="card">
+      <h2>Mis-logged a game?</h2>
+      <div id="lastGame" class="muted" style="margin-bottom:12px">No games yet.</div>
+      <button class="btn danger" id="undo">↶ Undo last game</button>
+      <button class="btn" id="recalc" title="Replay every game from 1000 to rebuild ratings">Recalculate Elo</button>
+      <div class="muted" style="margin-top:12px">Deleting any game replays the full history in order, so every rating after it is corrected.</div>
+    </section>
+
+    <section class="card">
+      <h2>Players <label class="toggle"><input type="checkbox" id="showRemoved"> show removed</label></h2>
+      <div class="inline">
+        <input class="input" id="newPlayer" placeholder="New player name" maxlength="40">
+        <button class="btn primary" id="addPlayer">Add</button>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Name</th><th class="num">Elo</th><th></th></tr></thead>
+          <tbody id="players"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Recent games</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>White</th><th>Res</th><th>Black</th><th class="num hide-sm">Δ</th><th></th></tr></thead>
+          <tbody id="games"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const signed = n => { n = Math.round(n); return `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`; };
+  const resText = r => r === 1 ? '1–0' : r === 0 ? '0–1' : '½–½';
+  let pin = '';
+  try { pin = sessionStorage.getItem('adminPin') || ''; } catch {}
+
+  function toast(msg, err) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('show');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  async function api(method, url, body) {
+    const res = await fetch('/api/admin' + url, {
+      method, headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+      pin = prompt('Admin PIN') || '';
+      try { sessionStorage.setItem('adminPin', pin); } catch {}
+      if (!pin) throw new Error('Admin PIN required');
+      return api(method, url, body);
+    }
+    const data = await res.json();
+    if (data && data.ok === false) throw new Error(data.error);
+    return data;
+  }
+  const run = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
+
+  async function load() {
+    const [players, games, session] = await Promise.all([api('GET', '/players'), api('GET', '/games?limit=200'), api('GET', '/session')]);
+    renderSession(session);
+    renderPlayers(players);
+    renderGames(games);
+  }
+
+  function renderSession(s) {
+    document.getElementById('sessionInfo').innerHTML = s
+      ? `Current: <b style="color:var(--text)">${esc(s.label)}</b> · started ${new Date(s.created_at).toLocaleString()}`
+      : 'No session yet — one will be created automatically when the first game is logged.';
+  }
+
+  function renderPlayers(players) {
+    const showRemoved = document.getElementById('showRemoved').checked;
+    const rows = players.filter(p => p.active || showRemoved).sort((a, b) => b.active - a.active || b.elo - a.elo);
+    document.getElementById('players').innerHTML = rows.map(p => `
+      <tr data-id="${p.id}" class="${p.active ? '' : 'removed'}">
+        <td><span class="pname">${esc(p.name)}</span></td>
+        <td class="num">${Math.round(p.elo)}</td>
+        <td class="act">${p.active
+          ? `<button class="btn small" data-act="rename">Rename</button><button class="btn small danger" data-act="remove">Remove</button>`
+          : `<button class="btn small" data-act="restore">Restore</button>`}</td>
+      </tr>`).join('') || `<tr><td colspan="3" class="muted">No players yet.</td></tr>`;
+  }
+
+  function renderGames(games) {
+    const last = games[0];
+    document.getElementById('lastGame').innerHTML = last
+      ? `Last: <b style="color:var(--text)">${esc(last.p1_name)} ${resText(last.result)} ${esc(last.p2_name)}</b> · ${new Date(last.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : 'No games yet.';
+    document.getElementById('undo').disabled = !last;
+    let prevSession = null;
+    document.getElementById('games').innerHTML = games.map(g => {
+      const head = g.session_id !== prevSession
+        ? `<tr><td colspan="5" class="session-tag">${esc(g.session_label)}</td></tr>` : '';
+      prevSession = g.session_id;
+      return head + `
+      <tr data-id="${g.id}">
+        <td>${esc(g.p1_name)}</td>
+        <td class="res">${resText(g.result)}</td>
+        <td>${esc(g.p2_name)}</td>
+        <td class="num hide-sm">${signed(g.p1_delta)} / ${signed(g.p2_delta)}</td>
+        <td class="act"><button class="btn small danger" data-act="delete" title="Delete game">✕</button></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="5" class="muted">No games yet.</td></tr>`;
+  }
+
+  document.getElementById('players').addEventListener('click', run(async e => {
+    const btn = e.target.closest('button[data-act]'); if (!btn) return;
+    const tr = btn.closest('tr'); const id = tr.dataset.id; const name = tr.querySelector('.pname').textContent;
+    if (btn.dataset.act === 'rename') {
+      const next = prompt(`Rename ${name} to:`, name);
+      if (next && next.trim() !== name) { await api('PATCH', `/players/${id}`, { name: next }); toast('Renamed'); }
+    } else if (btn.dataset.act === 'remove') {
+      if (confirm(`Remove ${name}?\n\nTheir past games stay in history so everyone else's Elo is unaffected. You can restore them later.`)) {
+        await api('DELETE', `/players/${id}`); toast(`${name} removed`);
+      }
+    } else if (btn.dataset.act === 'restore') {
+      await api('POST', `/players/${id}/restore`); toast(`${name} restored`);
+    }
+    await load();
+  }));
+
+  document.getElementById('games').addEventListener('click', run(async e => {
+    const btn = e.target.closest('button[data-act="delete"]'); if (!btn) return;
+    const tr = btn.closest('tr');
+    const desc = [...tr.children].slice(0, 3).map(td => td.textContent).join(' ');
+    if (!confirm(`Delete game: ${desc}?\n\nElo will be recalculated from the full history.`)) return;
+    await api('DELETE', `/games/${tr.dataset.id}`); toast('Game deleted, Elo recalculated');
+    await load();
+  }));
+
+  document.getElementById('undo').addEventListener('click', run(async () => {
+    if (!confirm('Undo the most recently logged game?')) return;
+    await api('POST', '/undo'); toast('Last game undone'); await load();
+  }));
+  document.getElementById('recalc').addEventListener('click', run(async () => {
+    await api('POST', '/recalculate'); toast('Elo recalculated from history'); await load();
+  }));
+  document.getElementById('newSession').addEventListener('click', run(async () => {
+    if (!confirm('Start a new session? The "Tonight" board will reset (Elo is kept).')) return;
+    const input = document.getElementById('sessionLabel');
+    await api('POST', '/sessions', { label: input.value }); input.value = ''; toast('New session started'); await load();
+  }));
+  const addPlayer = run(async () => {
+    const input = document.getElementById('newPlayer');
+    await api('POST', '/players', { name: input.value });
+    input.value = ''; toast('Player added'); await load();
+  });
+  document.getElementById('addPlayer').addEventListener('click', addPlayer);
+  document.getElementById('newPlayer').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
+  document.getElementById('showRemoved').addEventListener('change', run(load));
+
+  // Any change from anywhere (phones logging games) refreshes the admin view.
+  io().on('state', () => load().catch(e => toast(e.message, true)));
+})();
+</script>
+</body>
+</html>

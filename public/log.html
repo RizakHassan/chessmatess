@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<title>Log a Game</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 26px; margin: 4px 0 2px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin-bottom: 22px; }
+
+  .slot { margin-bottom: 14px; }
+  .slot label { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
+  .combo { position: relative; }
+  .combo .input { font-size: 18px; padding: 14px 44px 14px 14px; }
+  .combo.selected .input { border-color: var(--accent); font-weight: 700; }
+  .combo .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 22px; padding: 8px; cursor: pointer; display: none; }
+  .combo.selected .clear { display: block; }
+  .list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+    max-height: 46vh; overflow-y: auto; display: none; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  }
+  .combo.open .list { display: block; }
+  .list button { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 14px; border: 0; border-bottom: 1px solid var(--line); background: none; font-size: 17px; cursor: pointer; }
+  .list button:last-child { border-bottom: 0; }
+  .list button:hover, .list button:focus { background: var(--panel); outline: none; }
+  .list .elo { color: var(--muted); font-family: var(--mono); font-size: 15px; }
+  .list .none { padding: 14px; color: var(--muted); }
+
+  .vs { text-align: center; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
+
+  .results { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 22px; }
+  .results .btn { padding: 18px 14px; font-size: 18px; font-weight: 700; border-radius: 14px; }
+  .results .win { border-color: rgba(61,220,132,.4); }
+  .results .draw { color: var(--draw); }
+
+  .newbie { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .newbie .row { display: flex; gap: 8px; margin-top: 10px; }
+  .newbie .row .input { flex: 1; min-width: 0; }
+
+  .done { display: none; text-align: center; padding: 28px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; margin-top: 10px; }
+  .done.show { display: block; animation: pop .35s ease-out; }
+  @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+  .done .big { font-size: 22px; font-weight: 800; margin: 6px 0 16px; }
+  .done .line { display: flex; justify-content: space-between; font-size: 18px; padding: 10px 4px; border-top: 1px solid var(--line); }
+  .done .line .mono { font-weight: 700; }
+  .done .btn { margin-top: 18px; width: 100%; padding: 14px; font-size: 17px; }
+  .form.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>♞ Log a game</h1>
+  <div class="sub">Pick both players, then tap the result.</div>
+
+  <div class="form" id="form">
+    <div class="slot">
+      <label for="p1">Player 1 · White</label>
+      <div class="combo" id="c1">
+        <input class="input" id="p1" placeholder="Search name…" autocomplete="off" autocapitalize="words">
+        <button class="clear" aria-label="Clear">×</button>
+        <div class="list"></div>
+      </div>
+    </div>
+    <div class="vs">vs</div>
+    <div class="slot">
+      <label for="p2">Player 2 · Black</label>
+      <div class="combo" id="c2">
+        <input class="input" id="p2" placeholder="Search name…" autocomplete="off" autocapitalize="words">
+        <button class="clear" aria-label="Clear">×</button>
+        <div class="list"></div>
+      </div>
+    </div>
+
+    <div class="results">
+      <button class="btn win" data-result="1" disabled>Player 1 won</button>
+      <button class="btn draw" data-result="0.5" disabled>Draw</button>
+      <button class="btn win" data-result="0" disabled>Player 2 won</button>
+    </div>
+
+    <div class="newbie">
+      <button class="btn" id="newBtn" style="width:100%">🙋 I'm new — add my name</button>
+      <div class="row" id="newRow" hidden>
+        <input class="input" id="newName" placeholder="Your name" maxlength="40" autocapitalize="words">
+        <button class="btn primary" id="newSave">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="done" id="done">
+    <div>Result saved ✓</div>
+    <div class="big" id="doneTitle"></div>
+    <div id="doneLines"></div>
+    <button class="btn primary" id="again">Log another game</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  let players = [];
+  const picked = { c1: null, c2: null };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const byId = id => players.find(p => p.id === id);
+
+  function toast(msg, err) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('show');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  async function post(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  }
+
+  function setupCombo(key) {
+    const root = document.getElementById(key);
+    const input = root.querySelector('input');
+    const list = root.querySelector('.list');
+    const other = key === 'c1' ? 'c2' : 'c1';
+
+    function draw() {
+      const q = input.value.trim().toLowerCase();
+      const items = players
+        .filter(p => p.id !== picked[other])
+        .filter(p => !q || p.name.toLowerCase().includes(q))
+        .sort((a, b) => {
+          const as = a.name.toLowerCase().startsWith(q), bs = b.name.toLowerCase().startsWith(q);
+          return (bs - as) || a.name.localeCompare(b.name);
+        });
+      list.innerHTML = items.length
+        ? items.map(p => `<button type="button" data-id="${p.id}"><span>${esc(p.name)}</span><span class="elo">${p.elo}</span></button>`).join('')
+        : `<div class="none">No match. New here? Use “I'm new” below.</div>`;
+    }
+
+    function select(id) {
+      picked[key] = id;
+      const p = byId(id);
+      input.value = p ? p.name : '';
+      root.classList.toggle('selected', !!p);
+      root.classList.remove('open');
+      input.blur();
+      refreshButtons();
+    }
+    root._select = select;
+    root._draw = draw;
+
+    input.addEventListener('focus', () => { if (picked[key]) input.select(); draw(); root.classList.add('open'); });
+    input.addEventListener('input', () => { picked[key] = null; root.classList.remove('selected'); refreshButtons(); draw(); root.classList.add('open'); });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { const first = list.querySelector('button'); if (first) select(Number(first.dataset.id)); }
+      if (e.key === 'Escape') { root.classList.remove('open'); input.blur(); }
+    });
+    // pointerdown (not click) so selection lands before the input's blur closes the list
+    list.addEventListener('pointerdown', e => {
+      const b = e.target.closest('button[data-id]');
+      if (b) { e.preventDefault(); select(Number(b.dataset.id)); }
+    });
+    root.querySelector('.clear').addEventListener('click', () => { select(null); input.focus(); });
+    input.addEventListener('blur', () => setTimeout(() => {
+      root.classList.remove('open');
+      if (!picked[key]) input.value = '';
+      else input.value = byId(picked[key])?.name || '';
+    }, 120));
+  }
+  setupCombo('c1');
+  setupCombo('c2');
+
+  function refreshButtons() {
+    const a = byId(picked.c1), b = byId(picked.c2);
+    const ready = !!(a && b);
+    document.querySelectorAll('.results .btn').forEach(btn => btn.disabled = !ready);
+    document.querySelector('[data-result="1"]').textContent = a ? `${a.name} won` : 'Player 1 won';
+    document.querySelector('[data-result="0"]').textContent = b ? `${b.name} won` : 'Player 2 won';
+  }
+
+  let busy = false;
+  document.querySelectorAll('.results .btn').forEach(btn => btn.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    document.querySelectorAll('.results .btn').forEach(b => b.disabled = true);
+    try {
+      const { game } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result: Number(btn.dataset.result) });
+      showDone(game);
+    } catch (err) { toast(err.message, true); refreshButtons(); }
+    busy = false;
+  }));
+
+  function showDone(g) {
+    const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
+    const s = n => `<span class="mono ${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`;
+    document.getElementById('doneTitle').textContent =
+      g.result === 1 ? `${g.p1} beat ${g.p2}` : g.result === 0 ? `${g.p2} beat ${g.p1}` : `${g.p1} drew with ${g.p2}`;
+    document.getElementById('doneLines').innerHTML =
+      `<div class="line"><span>${esc(g.p1)}</span>${s(d1)}</div><div class="line"><span>${esc(g.p2)}</span>${s(d2)}</div>`;
+    document.getElementById('form').classList.add('hidden');
+    document.getElementById('done').classList.add('show');
+  }
+
+  document.getElementById('again').addEventListener('click', () => {
+    document.getElementById('c1')._select(null);
+    document.getElementById('c2')._select(null);
+    document.getElementById('done').classList.remove('show');
+    document.getElementById('form').classList.remove('hidden');
+    window.scrollTo(0, 0);
+  });
+
+  const newBtn = document.getElementById('newBtn'), newRow = document.getElementById('newRow'), newName = document.getElementById('newName');
+  newBtn.addEventListener('click', () => { newBtn.hidden = true; newRow.hidden = false; newName.focus(); });
+  async function addNew() {
+    try {
+      const { player } = await post('/api/players', { name: newName.value });
+      players.push({ id: player.id, name: player.name, elo: Math.round(player.elo) });
+      const slot = !picked.c1 ? 'c1' : !picked.c2 ? 'c2' : null;
+      if (slot) document.getElementById(slot)._select(player.id);
+      toast(`Welcome, ${player.name}! Starting Elo 1000`);
+      newName.value = ''; newRow.hidden = true; newBtn.hidden = false;
+    } catch (err) { toast(err.message, true); }
+  }
+  document.getElementById('newSave').addEventListener('click', addNew);
+  newName.addEventListener('keydown', e => { if (e.key === 'Enter') addNew(); });
+
+  const socket = io();
+  socket.on('state', s => {
+    players = s.players;
+    for (const k of ['c1', 'c2']) {
+      if (picked[k] && !byId(picked[k])) document.getElementById(k)._select(null);
+      document.getElementById(k)._draw();
+    }
+    refreshButtons();
+  });
+})();
+</script>
+</body>
+</html>
