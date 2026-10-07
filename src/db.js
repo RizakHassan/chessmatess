@@ -236,7 +236,7 @@ function snapshot() {
 }
 
 module.exports = {
-  db, K, START_ELO, eloDelta,
+  db, DB_PATH, K, START_ELO, eloDelta,
   currentSession, startSession,
   listPlayers, addPlayer, renamePlayer, removePlayer, restorePlayer,
   logGame, deleteGame, undoLastGame, recalculate, recentGames,

@@ -5,9 +5,15 @@ const express = require('express');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const store = require('./db');
+const { createBackups } = require('./backup');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
+const backups = createBackups({
+  db: store.db,
+  dir: process.env.BACKUP_DIR || path.join(path.dirname(store.DB_PATH), 'backups'),
+  keep: Number(process.env.BACKUP_KEEP) || 20,
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -36,7 +42,7 @@ function lanIp() {
   return pick ? pick.address : 'localhost';
 }
 
-const broadcast = () => io.emit('state', store.snapshot());
+const broadcast = () => { backups.markDirty(); io.emit('state', store.snapshot()); };
 
 // Wraps a mutating handler: returns JSON, maps thrown errors to 400, then pushes fresh state.
 const action = (fn) => (req, res) => {
@@ -121,8 +127,23 @@ admin.delete('/players/:id', action(req => store.removePlayer(Number(req.params.
 admin.post('/players/:id/restore', action(req => store.restorePlayer(Number(req.params.id))));
 admin.delete('/games/:id', action(req => store.deleteGame(Number(req.params.id))));
 admin.post('/undo', action(() => ({ undone: store.undoLastGame() })));
-admin.post('/sessions', action(req => ({ session: store.startSession(req.body.label) })));
+// Snapshot the finished night before the Tonight board resets.
+admin.post('/sessions', async (req, res) => {
+  try { if (backups.dirty) await backups.backup('session-end'); }
+  catch (err) { return res.status(500).json({ ok: false, error: `Backup failed, session not started: ${err.message}` }); }
+  action(r => ({ session: store.startSession(r.body.label) }))(req, res);
+});
 admin.post('/recalculate', action(() => store.recalculate()));
+admin.get('/backups', (req, res) => res.json({ dir: backups.dir, backups: backups.list() }));
+admin.post('/backups', async (req, res) => {
+  try { res.json({ ok: true, name: await backups.backup('manual') }); }
+  catch (err) { res.status(500).json({ ok: false, error: `Backup failed: ${err.message}` }); }
+});
+admin.get('/backups/:name', (req, res) => {
+  const file = backups.resolve(req.params.name);
+  if (!file) return res.status(404).json({ ok: false, error: 'Backup not found' });
+  res.download(file);
+});
 app.use('/api/admin', admin);
 
 app.use((req, res) => {
@@ -146,4 +167,20 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Log games (phones):  http://${ip}:${PORT}/log`);
   console.log(`  Admin:               http://localhost:${PORT}/admin${ADMIN_PIN ? '  (PIN protected)' : ''}`);
   console.log(`  Printable QR:        http://localhost:${PORT}/qr\n`);
+  console.log(`  Backups folder:      ${backups.dir}\n`);
+  backups.start().catch(err => console.error('  Startup backup failed:', err.message));
 });
+
+// Ctrl+C: take a final backup if anything changed since the last one.
+let stopping = false;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    if (stopping) process.exit(1);
+    stopping = true;
+    try {
+      if (backups.dirty) console.log('\n  Saving a backup before exit…');
+      await backups.stop();
+    } catch (err) { console.error('  Backup on exit failed:', err.message); }
+    process.exit(0);
+  });
+}

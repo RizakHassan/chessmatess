@@ -59,6 +59,8 @@ The terminal prints the URLs:
 | `HOST_IP` | auto-detected | IP address used in the QR code. Set this if the wrong network adapter is picked (for example, a VPN). |
 | `ADMIN_PIN` | *(none)* | When set, `/admin` asks for this PIN before making changes |
 | `DB_PATH` | `./chessmates.db` | Location of the SQLite database file |
+| `BACKUP_DIR` | `backups/` next to the database | Where backups are written |
+| `BACKUP_KEEP` | `20` | How many backups to keep |
 
 Example: `ADMIN_PIN=1234 PORT=8080 npm start`. On Windows PowerShell, run `$env:ADMIN_PIN="1234"; npm start`.
 
@@ -78,7 +80,20 @@ games    (id, p1_id /*white*/, p2_id, result /*1 | 0.5 | 0 for p1*/,
           p1_delta, p2_delta, session_id, created_at)
 ```
 
-All data lives in `chessmates.db`, which git ignores. **Back it up by copying that file.** Copy it while the server is stopped, or include the `-wal` file next to it.
+All data lives in `chessmates.db`, which git ignores.
+
+## Backups
+
+The app backs up the database to a `backups/` folder next to it. Git ignores this folder too. A backup is made:
+
+- when the app starts, if there's any data
+- before **Start new session**, so every club night gets its own snapshot
+- every 10 minutes, if anything changed
+- when you stop the app with **Ctrl+C**
+
+The newest 20 are kept; change that with `BACKUP_KEEP`. The **Backups** panel in `/admin` shows the latest ones and has **Back up now** and **Download** buttons. Download one now and then to a USB stick or cloud drive, because backups on the same laptop won't survive the laptop.
+
+**To restore:** stop the app, then copy the backup you want over `chessmates.db`. Also delete any `chessmates.db-wal` and `chessmates.db-shm` files. Then start the app again. To keep a copy of the current state, rename `chessmates.db` first instead of overwriting it.
 
 ## Development
 
@@ -92,11 +107,12 @@ npm test       # Elo + replay tests (uses a temp database)
 ```
 src/server.js      Express routes, Socket.io broadcast, QR page
 src/db.js          SQLite schema, Elo maths, replay, standings
+src/backup.js      Automatic database backups
 public/display.html  Projector leaderboard (FLIP slide animations, glow flashes)
 public/log.html      Mobile result logger
 public/admin.html    Admin tools
 public/style.css     Shared design tokens from the logo palette (slate, sky, orange, cream, ink)
 public/logo.png      Club logo (also favicon.png / apple-touch-icon.png)
-test/elo.test.js     Tests
+test/               Elo, replay and backup tests
 .agents/skills/      Design skills from Leonxlnx/taste-skill (installed via `npx skills add`)
 ```
