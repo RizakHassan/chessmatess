@@ -64,30 +64,31 @@ app.get('/qr', async (req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Log your game</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/fonts/geist/index.css">
 <link rel="stylesheet" href="/fonts/geist-mono/index.css">
 <style>
   @page { size: A4; margin: 16mm; }
-  body { font-family: "Geist Variable", system-ui, sans-serif; margin: 0; color: #0e1117; background: #fff;
+  body { font-family: "Geist Variable", system-ui, sans-serif; margin: 0; color: #22271e; background: #fffcf0;
          display: grid; justify-items: center; padding: 40px 16px; -webkit-font-smoothing: antialiased; }
   .sheet { width: min(100%, 150mm); }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; color: #4a5162; }
-  .brand span { font-family: "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif; font-size: 22px; color: #0e1117; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img { width: 64px; height: 64px; border-radius: 10px; }
+  .brand span { font: 800 22px "Geist Mono Variable", ui-monospace, monospace; text-transform: uppercase; letter-spacing: -0.03em; color: #fe502d; }
   h1 { font-size: 52px; line-height: 1; letter-spacing: -0.045em; margin: 18px 0 10px; text-wrap: balance; }
-  p.sub { font-size: 20px; margin: 0 0 30px; color: #4a5162; max-width: 34ch; }
-  .qr { border: 1.5px solid #0e1117; border-radius: 20px; padding: 18px; }
+  p.sub { font-size: 20px; margin: 0 0 30px; color: #416072; max-width: 34ch; }
+  .qr { background: #fff; border: 3px solid #416072; border-radius: 20px; padding: 18px; box-shadow: 10px 10px 0 #a7dcfa; }
   .qr svg { width: 100%; height: auto; display: block; }
-  .url { font: 500 17px "Geist Mono Variable", ui-monospace, monospace; margin-top: 14px; word-break: break-all; color: #4a5162; }
+  .url { font: 500 17px "Geist Mono Variable", ui-monospace, monospace; margin-top: 14px; word-break: break-all; color: #416072; }
   ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0; margin: 30px 0 0; list-style: none; counter-reset: s; }
-  li { counter-increment: s; font-size: 16px; line-height: 1.35; padding-top: 12px; border-top: 2px solid #0e1117; }
-  li::before { content: counter(s); display: block; font: 600 14px "Geist Mono Variable", monospace; color: #8a90a0; margin-bottom: 4px; }
-  .print { margin-top: 32px; font: inherit; font-weight: 600; padding: 12px 22px; border-radius: 10px; border: 0; background: #0e1117; color: #fff; cursor: pointer; }
-  .print:hover { background: #2a303c; }
+  li { counter-increment: s; font-size: 16px; line-height: 1.35; padding-top: 12px; border-top: 3px solid #fe502d; }
+  li::before { content: counter(s); display: block; font: 600 14px "Geist Mono Variable", monospace; color: #416072; margin-bottom: 4px; }
+  .print { margin-top: 32px; font: inherit; font-weight: 600; padding: 12px 22px; border-radius: 10px; border: 0; background: #416072; color: #fffcf0; cursor: pointer; }
+  .print:hover { background: #33505f; }
   @media print { .print { display: none; } body { padding: 0; } }
 </style></head>
 <body><main class="sheet">
-  <div class="brand"><span>&#9822;&#65038;</span>Chessmates</div>
+  <div class="brand"><img src="/logo.png" alt="Chessmates logo"><span>Chessmates</span></div>
   <h1>Finished a game?</h1>
   <p class="sub">Scan with your phone camera to log the result on the live leaderboard.</p>
   <div class="qr">${svg}</div>
@@ -128,7 +129,7 @@ app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ ok: false, error: 'Not found' });
   res.status(404).type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/style.css">
 <style>main{max-width:520px;margin:0 auto;padding:18vh 20px 40px}h1{font-size:40px;letter-spacing:-.04em;margin:0 0 8px}
 p{color:var(--muted);margin:0 0 24px}nav{display:flex;gap:8px;flex-wrap:wrap}</style></head>
 <body><main><h1>Page not found</h1><p>There is nothing at this address. Try one of these instead.</p>

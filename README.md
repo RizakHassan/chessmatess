@@ -1,6 +1,6 @@
 # ♞ Chessmates — live club leaderboard
 
-A small local web app for a weekly chess club. Players log results from their phones, and a projector shows a live leaderboard. Rows slide into their new positions and flash green or red when ratings change.
+A small local web app for a weekly chess club. Players log results from their phones, and a projector shows a live leaderboard. Rows slide into their new positions and flash green or red when ratings change. The look follows the club logo: a light cream background with slate, sky blue and orange-red.
 
 **Stack:** Node.js · Express · SQLite (better-sqlite3) · Socket.io · plain HTML/CSS/JS
 
@@ -95,8 +95,8 @@ src/db.js          SQLite schema, Elo maths, replay, standings
 public/display.html  Projector leaderboard (FLIP slide animations, glow flashes)
 public/log.html      Mobile result logger
 public/admin.html    Admin tools
-public/style.css     Shared design tokens (colour, radius scale, type) and dark theme
-public/favicon.svg   Tab icon
+public/style.css     Shared design tokens from the logo palette (slate, sky, orange, cream, ink)
+public/logo.png      Club logo (also favicon.png / apple-touch-icon.png)
 test/elo.test.js     Tests
 .agents/skills/      Design skills from Leonxlnx/taste-skill (installed via `npx skills add`)
 ```

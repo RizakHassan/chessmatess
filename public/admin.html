@@ -5,25 +5,22 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Manage players, sessions and game history for the Chessmates leaderboard.">
 <title>Chessmates Admin</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/style.css">
 <style>
   .wrap { max-width: 1160px; margin: 0 auto; padding: 28px 20px 64px; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .mark {
-    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-    background: linear-gradient(160deg, var(--surface-3), var(--surface)); box-shadow: 0 0 0 1px var(--line-strong) inset;
-    font-size: 22px; color: var(--accent);
-  }
-  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.03em; }
+  .brand .logo { width: 48px; height: 48px; }
+  .brand .wordmark { font-size: 14px; line-height: 1; }
+  header h1 { margin: 2px 0 0; font-size: 26px; letter-spacing: -0.03em; line-height: 1.05; }
   header nav { display: flex; gap: 4px; flex-wrap: wrap; }
 
   .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
   .col { display: grid; gap: 16px; min-width: 0; }
-  .panel { background: var(--surface); border-radius: var(--r-container); padding: 22px; box-shadow: 0 0 0 1px var(--line) inset; min-width: 0; }
+  .panel { background: var(--surface); border-radius: var(--r-container); padding: 22px; box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); min-width: 0; }
   .panel h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .panel > p.lead { margin: 0 0 16px; color: var(--muted); font-size: 14px; max-width: 60ch; }
+  .panel > p.lead { margin: 0 0 16px; color: var(--text-2); font-size: 14px; max-width: 60ch; }
   .muted { color: var(--muted); font-size: 14px; }
   .inline { display: flex; gap: 8px; }
   .inline .input { flex: 1; min-width: 0; padding: 10px 12px; }
@@ -31,7 +28,7 @@
 
   .current {
     display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
-    padding: 14px 16px; border-radius: var(--r-row); background: var(--bg); margin-bottom: 14px;
+    padding: 14px 16px; border-radius: var(--r-row); background: var(--sky-soft); margin-bottom: 14px;
   }
   .current b { font-size: 17px; }
 
@@ -39,22 +36,22 @@
 
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  th { color: var(--muted); font-size: 13px; font-weight: 500; }
+  th { color: var(--muted); font-size: 13px; font-weight: 600; }
   td.num, th.num { text-align: right; }
   td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   th.num { font-family: var(--font); }
   td.act { text-align: right; white-space: nowrap; width: 1%; }
   td.act .btn + .btn { margin-left: 4px; }
   tbody tr { transition: background-color .15s; }
-  tbody tr:hover { background: rgba(148,163,184,.04); }
+  tbody tr:hover { background: rgba(167,220,250,.18); }
   tr.removed td:not(.act) { opacity: .45; }
   .scroll { max-height: 640px; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
   .name-input { padding: 6px 10px; font-size: 15px; }
   .res { font-family: var(--mono); font-weight: 600; color: var(--text-2); }
-  tr.session-row td { color: var(--muted); font-size: 13px; padding-top: 18px; border-bottom-color: var(--line-strong); }
+  tr.session-row td { color: var(--slate); font-size: 13px; font-weight: 650; padding-top: 18px; border-bottom-color: var(--line-strong); }
   .deltas { font-family: var(--mono); font-size: 14px; }
-  label.toggle { font-size: 14px; color: var(--muted); font-weight: 400; display: flex; gap: 6px; align-items: center; cursor: pointer; }
-  label.toggle input { accent-color: var(--accent); }
+  label.toggle { font-size: 14px; color: var(--text-2); font-weight: 500; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  label.toggle input { accent-color: var(--slate); }
   .empty-row td { color: var(--muted); padding: 22px 8px; }
 
   @media (max-width: 820px) {
@@ -67,8 +64,8 @@
 <main class="wrap">
   <header>
     <div class="brand">
-      <div class="mark glyph" aria-hidden="true">♞&#xFE0E;</div>
-      <h1>Admin</h1>
+      <img class="logo" src="/logo.png" alt="Chessmates logo">
+      <div><span class="wordmark">Chessmates</span><h1>Admin</h1></div>
     </div>
     <nav aria-label="Pages">
       <a class="btn ghost small" href="/display" target="_blank">Display ↗</a>
