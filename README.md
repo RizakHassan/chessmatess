@@ -4,13 +4,15 @@ A small local web app for a weekly chess club. Players log results from their ph
 
 **Stack:** Node.js · Express · SQLite (better-sqlite3) · Socket.io · plain HTML/CSS/JS
 
+The app doesn't need internet access on club night. Fonts (Geist and Geist Mono) are served from `node_modules`, and nothing loads from a CDN.
+
 ## Pages
 
 | URL | What it's for |
 | --- | --- |
 | `/display` | Projector view. **Tonight** ranks players by wins this session, with Elo as the tiebreaker. **This Month** ranks by Elo with monthly W-D-L, laid out for an Instagram screenshot. |
 | `/log` | Mobile page that people open from the QR code. Pick two players, then tap **P1 won / Draw / P2 won**. New people tap **I'm new** to add their name. No login. |
-| `/admin` | Add, rename, remove or restore players. Undo or delete a mis-logged game, which recalculates Elo. Start a new session. |
+| `/admin` | Add, rename, remove or restore players (rename happens inline). Undo or delete a mis-logged game, which recalculates Elo. Start a new session. Destructive buttons ask for a second tap instead of a popup. |
 | `/qr` | Printable A4 page with a QR code that points at `/log` on this machine's LAN IP. |
 
 ## Setup
@@ -93,6 +95,8 @@ src/db.js          SQLite schema, Elo maths, replay, standings
 public/display.html  Projector leaderboard (FLIP slide animations, glow flashes)
 public/log.html      Mobile result logger
 public/admin.html    Admin tools
-public/style.css     Shared dark theme
+public/style.css     Shared design tokens (colour, radius scale, type) and dark theme
+public/favicon.svg   Tab icon
 test/elo.test.js     Tests
+.agents/skills/      Design skills from Leonxlnx/taste-skill (installed via `npx skills add`)
 ```

@@ -3,97 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Manage players, sessions and game history for the Chessmates leaderboard.">
 <title>Chessmates Admin</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <style>
-  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
-  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-  header h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
-  header nav { display: flex; gap: 8px; flex-wrap: wrap; }
-  header nav a { text-decoration: none; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 28px 20px 64px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--surface-3), var(--surface)); box-shadow: 0 0 0 1px var(--line-strong) inset;
+    font-size: 22px; color: var(--accent);
+  }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.03em; }
+  header nav { display: flex; gap: 4px; flex-wrap: wrap; }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; }
-  .card.wide { grid-column: 1 / -1; }
-  .card h2 { margin: 0 0 12px; font-size: 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  .panel { background: var(--surface); border-radius: var(--r-container); padding: 22px; box-shadow: 0 0 0 1px var(--line) inset; min-width: 0; }
+  .panel h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .panel > p.lead { margin: 0 0 16px; color: var(--muted); font-size: 14px; max-width: 60ch; }
   .muted { color: var(--muted); font-size: 14px; }
-  .inline { display: flex; gap: 8px; margin-bottom: 12px; }
+  .inline { display: flex; gap: 8px; }
   .inline .input { flex: 1; min-width: 0; padding: 10px 12px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
-  td.num, th.num { text-align: right; font-family: var(--mono); }
-  td.act { text-align: right; white-space: nowrap; }
+  .current {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    padding: 14px 16px; border-radius: var(--r-row); background: var(--bg); margin-bottom: 14px;
+  }
+  .current b { font-size: 17px; }
+
+  .pin { max-width: 420px; margin: 8vh auto 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-size: 13px; font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  th.num { font-family: var(--font); }
+  td.act { text-align: right; white-space: nowrap; width: 1%; }
   td.act .btn + .btn { margin-left: 4px; }
-  tr.removed td { opacity: .5; }
-  .scroll { max-height: 520px; overflow-y: auto; }
-  .name-edit { padding: 6px 8px; font-size: 15px; }
-  .res { font-weight: 700; }
-  .session-tag { font-size: 12px; color: var(--muted); }
+  tbody tr { transition: background-color .15s; }
+  tbody tr:hover { background: rgba(148,163,184,.04); }
+  tr.removed td:not(.act) { opacity: .45; }
+  .scroll { max-height: 640px; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+  .name-input { padding: 6px 10px; font-size: 15px; }
+  .res { font-family: var(--mono); font-weight: 600; color: var(--text-2); }
+  tr.session-row td { color: var(--muted); font-size: 13px; padding-top: 18px; border-bottom-color: var(--line-strong); }
+  .deltas { font-family: var(--mono); font-size: 14px; }
   label.toggle { font-size: 14px; color: var(--muted); font-weight: 400; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  label.toggle input { accent-color: var(--accent); }
+  .empty-row td { color: var(--muted); padding: 22px 8px; }
 
-  @media (max-width: 760px) {
+  @media (max-width: 820px) {
     .grid { grid-template-columns: 1fr; }
     .hide-sm { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
   <header>
-    <h1>♞ Admin</h1>
-    <nav>
-      <a class="btn small" href="/display" target="_blank">Display ↗</a>
-      <a class="btn small" href="/log" target="_blank">Log page ↗</a>
-      <a class="btn small" href="/qr" target="_blank">Print QR ↗</a>
+    <div class="brand">
+      <div class="mark glyph" aria-hidden="true">♞&#xFE0E;</div>
+      <h1>Admin</h1>
+    </div>
+    <nav aria-label="Pages">
+      <a class="btn ghost small" href="/display" target="_blank">Display ↗</a>
+      <a class="btn ghost small" href="/log" target="_blank">Log page ↗</a>
+      <a class="btn ghost small" href="/qr" target="_blank">Print QR ↗</a>
     </nav>
   </header>
 
-  <div class="grid">
-    <section class="card">
-      <h2>Session</h2>
-      <div id="sessionInfo" class="muted" style="margin-bottom:12px"></div>
-      <div class="inline">
-        <input class="input" id="sessionLabel" placeholder="Label (optional, defaults to today's date)">
-        <button class="btn primary" id="newSession">Start new session</button>
-      </div>
-      <div class="muted">Start one at the beginning of each Monday night. “Tonight” on the display shows only games from the current session. Elo never resets.</div>
-    </section>
+  <form class="panel pin" id="pinForm" hidden>
+    <h2>Enter admin PIN</h2>
+    <p class="lead">This club laptop has an admin PIN set.</p>
+    <div class="inline">
+      <input class="input" id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" aria-label="Admin PIN">
+      <button class="btn primary" type="submit">Unlock</button>
+    </div>
+    <p class="error-text" id="pinErr" aria-live="polite"></p>
+  </form>
 
-    <section class="card">
-      <h2>Mis-logged a game?</h2>
-      <div id="lastGame" class="muted" style="margin-bottom:12px">No games yet.</div>
-      <button class="btn danger" id="undo">↶ Undo last game</button>
-      <button class="btn" id="recalc" title="Replay every game from 1000 to rebuild ratings">Recalculate Elo</button>
-      <div class="muted" style="margin-top:12px">Deleting any game replays the full history in order, so every rating after it is corrected.</div>
-    </section>
+  <div class="grid" id="app">
+    <div class="col">
+      <section class="panel">
+        <h2>Session</h2>
+        <p class="lead">Start a new session each Monday. The Tonight board shows only the current session. Elo carries over.</p>
+        <div class="current" id="sessionInfo"><span class="muted">Loading…</span></div>
+        <div class="inline">
+          <input class="input" id="sessionLabel" placeholder="Label (optional)" aria-label="Session label">
+          <button class="btn primary" id="newSession" data-confirm="Start it?">Start new session</button>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2>Players <label class="toggle"><input type="checkbox" id="showRemoved"> show removed</label></h2>
-      <div class="inline">
-        <input class="input" id="newPlayer" placeholder="New player name" maxlength="40">
-        <button class="btn primary" id="addPlayer">Add</button>
-      </div>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Name</th><th class="num">Elo</th><th></th></tr></thead>
-          <tbody id="players"></tbody>
-        </table>
-      </div>
-    </section>
+      <section class="panel">
+        <h2>Fix a mistake</h2>
+        <p class="lead">Undo or deleting any game replays every result in order, so all later ratings are corrected.</p>
+        <div class="current" id="lastGame"><span class="muted">No games yet.</span></div>
+        <div class="actions">
+          <button class="btn danger" id="undo" data-confirm="Undo it?">Undo last game</button>
+          <button class="btn ghost" id="recalc">Recalculate Elo</button>
+        </div>
+      </section>
 
-    <section class="card">
+      <section class="panel">
+        <h2>Players <label class="toggle"><input type="checkbox" id="showRemoved"> Show removed</label></h2>
+        <form class="inline" id="addForm" style="margin: 12px 0 4px">
+          <input class="input" id="newPlayer" placeholder="New player name" maxlength="40" aria-label="New player name">
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <p class="error-text" id="addErr" aria-live="polite"></p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Name</th><th class="num">Elo</th><th></th></tr></thead>
+            <tbody id="players"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
       <h2>Recent games</h2>
+      <p class="lead">Newest first, grouped by session.</p>
       <div class="scroll">
         <table>
-          <thead><tr><th>White</th><th>Res</th><th>Black</th><th class="num hide-sm">Δ</th><th></th></tr></thead>
+          <thead><tr><th>White</th><th>Result</th><th>Black</th><th class="num hide-sm">Elo change</th><th></th></tr></thead>
           <tbody id="games"></tbody>
         </table>
       </div>
     </section>
   </div>
-</div>
+</main>
 <div class="toast" id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -104,6 +147,7 @@
   const resText = r => r === 1 ? '1–0' : r === 0 ? '0–1' : '½–½';
   let pin = '';
   try { pin = sessionStorage.getItem('adminPin') || ''; } catch {}
+  let editing = null; // player id being renamed — skip live re-renders of that table meanwhile
 
   function toast(msg, err) {
     const t = document.getElementById('toast');
@@ -111,119 +155,161 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
   }
 
+  class PinRequired extends Error {}
   async function api(method, url, body) {
     const res = await fetch('/api/admin' + url, {
       method, headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401) {
-      pin = prompt('Admin PIN') || '';
-      try { sessionStorage.setItem('adminPin', pin); } catch {}
-      if (!pin) throw new Error('Admin PIN required');
-      return api(method, url, body);
-    }
+    if (res.status === 401) throw new PinRequired('Admin PIN required');
     const data = await res.json();
     if (data && data.ok === false) throw new Error(data.error);
     return data;
   }
-  const run = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
+  const run = fn => async (...a) => {
+    try { await fn(...a); }
+    catch (e) { if (e instanceof PinRequired) showPin(); else toast(e.message, true); }
+  };
+
+  function showPin(wrong) {
+    document.getElementById('app').hidden = true;
+    document.getElementById('pinForm').hidden = false;
+    document.getElementById('pinErr').textContent = wrong ? 'That PIN is not right.' : '';
+    document.getElementById('pinInput').focus();
+  }
+  document.getElementById('pinForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    pin = document.getElementById('pinInput').value;
+    try { sessionStorage.setItem('adminPin', pin); } catch {}
+    try {
+      await load();
+      document.getElementById('pinForm').hidden = true;
+      document.getElementById('app').hidden = false;
+    } catch (err) { if (err instanceof PinRequired) showPin(true); else toast(err.message, true); }
+  });
+
+  // Destructive buttons need a second tap within 3s instead of a browser confirm() popup.
+  function armed(btn) {
+    if (btn.classList.contains('armed')) { clearTimeout(btn._t); btn.classList.remove('armed'); btn.textContent = btn._label; return true; }
+    btn._label = btn.textContent;
+    btn.textContent = btn.dataset.confirm || 'Confirm?';
+    btn.classList.add('armed');
+    btn._t = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = btn._label; }, 3000);
+    return false;
+  }
 
   async function load() {
     const [players, games, session] = await Promise.all([api('GET', '/players'), api('GET', '/games?limit=200'), api('GET', '/session')]);
     renderSession(session);
-    renderPlayers(players);
+    if (editing === null) renderPlayers(players);
     renderGames(games);
   }
 
   function renderSession(s) {
     document.getElementById('sessionInfo').innerHTML = s
-      ? `Current: <b style="color:var(--text)">${esc(s.label)}</b> · started ${new Date(s.created_at).toLocaleString()}`
-      : 'No session yet — one will be created automatically when the first game is logged.';
+      ? `<b>${esc(s.label)}</b><span class="muted">started ${new Date(s.created_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>`
+      : '<span class="muted">No session yet. One starts automatically with the first game.</span>';
   }
 
   function renderPlayers(players) {
     const showRemoved = document.getElementById('showRemoved').checked;
     const rows = players.filter(p => p.active || showRemoved).sort((a, b) => b.active - a.active || b.elo - a.elo);
     document.getElementById('players').innerHTML = rows.map(p => `
-      <tr data-id="${p.id}" class="${p.active ? '' : 'removed'}">
-        <td><span class="pname">${esc(p.name)}</span></td>
+      <tr data-id="${p.id}" data-name="${esc(p.name)}" class="${p.active ? '' : 'removed'}">
+        <td class="name-cell">${esc(p.name)}</td>
         <td class="num">${Math.round(p.elo)}</td>
         <td class="act">${p.active
-          ? `<button class="btn small" data-act="rename">Rename</button><button class="btn small danger" data-act="remove">Remove</button>`
+          ? `<button class="btn ghost small" data-act="rename">Rename</button><button class="btn danger small" data-act="remove" data-confirm="Remove?">Remove</button>`
           : `<button class="btn small" data-act="restore">Restore</button>`}</td>
-      </tr>`).join('') || `<tr><td colspan="3" class="muted">No players yet.</td></tr>`;
+      </tr>`).join('') || `<tr class="empty-row"><td colspan="3">No players yet. Add the first one above, or people can add themselves from the log page.</td></tr>`;
   }
 
   function renderGames(games) {
     const last = games[0];
     document.getElementById('lastGame').innerHTML = last
-      ? `Last: <b style="color:var(--text)">${esc(last.p1_name)} ${resText(last.result)} ${esc(last.p2_name)}</b> · ${new Date(last.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      : 'No games yet.';
+      ? `<b>${esc(last.p1_name)} <span class="res">${resText(last.result)}</span> ${esc(last.p2_name)}</b><span class="muted">${new Date(last.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`
+      : '<span class="muted">No games yet.</span>';
     document.getElementById('undo').disabled = !last;
     let prevSession = null;
     document.getElementById('games').innerHTML = games.map(g => {
-      const head = g.session_id !== prevSession
-        ? `<tr><td colspan="5" class="session-tag">${esc(g.session_label)}</td></tr>` : '';
+      const head = g.session_id !== prevSession ? `<tr class="session-row"><td colspan="5">${esc(g.session_label)}</td></tr>` : '';
       prevSession = g.session_id;
       return head + `
       <tr data-id="${g.id}">
         <td>${esc(g.p1_name)}</td>
         <td class="res">${resText(g.result)}</td>
         <td>${esc(g.p2_name)}</td>
-        <td class="num hide-sm">${signed(g.p1_delta)} / ${signed(g.p2_delta)}</td>
-        <td class="act"><button class="btn small danger" data-act="delete" title="Delete game">✕</button></td>
+        <td class="num hide-sm deltas">${signed(g.p1_delta)} / ${signed(g.p2_delta)}</td>
+        <td class="act"><button class="btn danger small" data-act="delete" data-confirm="Delete?" aria-label="Delete game">Delete</button></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="5" class="muted">No games yet.</td></tr>`;
+    }).join('') || `<tr class="empty-row"><td colspan="5">Games appear here as soon as someone logs one.</td></tr>`;
+  }
+
+  function startRename(tr) {
+    editing = Number(tr.dataset.id);
+    const cell = tr.querySelector('.name-cell');
+    cell.innerHTML = `<input class="input name-input" value="${esc(tr.dataset.name)}" maxlength="40" aria-label="New name">`;
+    tr.querySelector('.act').innerHTML = `<button class="btn primary small" data-act="save">Save</button><button class="btn ghost small" data-act="cancel">Cancel</button>`;
+    const input = cell.querySelector('input');
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') tr.querySelector('[data-act="save"]').click();
+      if (e.key === 'Escape') tr.querySelector('[data-act="cancel"]').click();
+    });
   }
 
   document.getElementById('players').addEventListener('click', run(async e => {
     const btn = e.target.closest('button[data-act]'); if (!btn) return;
-    const tr = btn.closest('tr'); const id = tr.dataset.id; const name = tr.querySelector('.pname').textContent;
-    if (btn.dataset.act === 'rename') {
-      const next = prompt(`Rename ${name} to:`, name);
-      if (next && next.trim() !== name) { await api('PATCH', `/players/${id}`, { name: next }); toast('Renamed'); }
-    } else if (btn.dataset.act === 'remove') {
-      if (confirm(`Remove ${name}?\n\nTheir past games stay in history so everyone else's Elo is unaffected. You can restore them later.`)) {
-        await api('DELETE', `/players/${id}`); toast(`${name} removed`);
-      }
-    } else if (btn.dataset.act === 'restore') {
-      await api('POST', `/players/${id}/restore`); toast(`${name} restored`);
+    const tr = btn.closest('tr'); const id = tr.dataset.id; const name = tr.dataset.name;
+    const act = btn.dataset.act;
+    if (act === 'rename') return startRename(tr);
+    if (act === 'cancel') { editing = null; return load(); }
+    if (act === 'save') {
+      const next = tr.querySelector('.name-input').value.trim();
+      if (next && next !== name) { await api('PATCH', `/players/${id}`, { name: next }); toast(`Renamed to ${next}`); }
+      editing = null;
     }
+    if (act === 'remove') {
+      if (!armed(btn)) return;
+      await api('DELETE', `/players/${id}`); toast(`${name} removed. Their past games still count.`);
+    }
+    if (act === 'restore') { await api('POST', `/players/${id}/restore`); toast(`${name} restored`); }
     await load();
   }));
 
   document.getElementById('games').addEventListener('click', run(async e => {
-    const btn = e.target.closest('button[data-act="delete"]'); if (!btn) return;
-    const tr = btn.closest('tr');
-    const desc = [...tr.children].slice(0, 3).map(td => td.textContent).join(' ');
-    if (!confirm(`Delete game: ${desc}?\n\nElo will be recalculated from the full history.`)) return;
-    await api('DELETE', `/games/${tr.dataset.id}`); toast('Game deleted, Elo recalculated');
+    const btn = e.target.closest('button[data-act="delete"]'); if (!btn || !armed(btn)) return;
+    await api('DELETE', `/games/${btn.closest('tr').dataset.id}`); toast('Game deleted. Elo recalculated.');
     await load();
   }));
 
-  document.getElementById('undo').addEventListener('click', run(async () => {
-    if (!confirm('Undo the most recently logged game?')) return;
+  document.getElementById('undo').addEventListener('click', run(async e => {
+    if (!armed(e.currentTarget)) return;
     await api('POST', '/undo'); toast('Last game undone'); await load();
   }));
   document.getElementById('recalc').addEventListener('click', run(async () => {
     await api('POST', '/recalculate'); toast('Elo recalculated from history'); await load();
   }));
-  document.getElementById('newSession').addEventListener('click', run(async () => {
-    if (!confirm('Start a new session? The "Tonight" board will reset (Elo is kept).')) return;
+  document.getElementById('newSession').addEventListener('click', run(async e => {
+    if (!armed(e.currentTarget)) return;
     const input = document.getElementById('sessionLabel');
     await api('POST', '/sessions', { label: input.value }); input.value = ''; toast('New session started'); await load();
   }));
-  const addPlayer = run(async () => {
+
+  const addErr = document.getElementById('addErr');
+  document.getElementById('newPlayer').addEventListener('input', () => { addErr.textContent = ''; });
+  document.getElementById('addForm').addEventListener('submit', run(async e => {
+    e.preventDefault();
     const input = document.getElementById('newPlayer');
-    await api('POST', '/players', { name: input.value });
-    input.value = ''; toast('Player added'); await load();
-  });
-  document.getElementById('addPlayer').addEventListener('click', addPlayer);
-  document.getElementById('newPlayer').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
+    if (!input.value.trim()) { addErr.textContent = 'Enter a name first.'; return; }
+    try { await api('POST', '/players', { name: input.value }); }
+    catch (err) { if (err instanceof PinRequired) throw err; addErr.textContent = err.message; return; }
+    toast(`${input.value.trim()} added`); input.value = ''; await load();
+  }));
   document.getElementById('showRemoved').addEventListener('change', run(load));
 
   // Any change from anywhere (phones logging games) refreshes the admin view.
-  io().on('state', () => load().catch(e => toast(e.message, true)));
+  io().on('state', run(load));
 })();
 </script>
 </body>

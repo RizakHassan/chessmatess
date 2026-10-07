@@ -127,7 +127,10 @@ function logGame(p1Id, p2Id, result) {
       .run(p1Id, p2Id, result, d1, d2, session.id, now());
     db.prepare('UPDATE players SET elo = elo + ? WHERE id = ?').run(d1, p1Id);
     db.prepare('UPDATE players SET elo = elo + ? WHERE id = ?').run(d2, p2Id);
-    return { id: info.lastInsertRowid, p1: p1.name, p2: p2.name, result, p1_delta: d1, p2_delta: d2 };
+    return {
+      id: info.lastInsertRowid, p1: p1.name, p2: p2.name, result, p1_delta: d1, p2_delta: d2,
+      p1_elo: Math.round(p1.elo + d1), p2_elo: Math.round(p2.elo + d2),
+    };
   })();
 }
 

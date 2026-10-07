@@ -3,165 +3,216 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Live Elo leaderboard for the Chessmates Monday night chess club.">
 <title>Chessmates Leaderboard</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <style>
   body { overflow-x: hidden; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 60px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 36px 32px 64px; }
 
-  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
-  .brand { display: flex; align-items: center; gap: 14px; }
-  .brand .logo { font-size: 44px; line-height: 1; filter: drop-shadow(0 0 14px rgba(245,196,81,.45)); }
-  .brand h1 { margin: 0; font-size: clamp(26px, 3.2vw, 40px); letter-spacing: -0.02em; }
-  .brand .sub { color: var(--muted); font-size: 15px; margin-top: 2px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .mark {
+    width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--surface-3), var(--surface));
+    box-shadow: var(--shadow), 0 0 0 1px var(--line-strong) inset;
+    font-size: 32px; color: var(--accent);
+  }
+  .brand h1 { margin: 0; font-size: clamp(30px, 3.4vw, 46px); font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+  .brand .sub { color: var(--muted); font-size: 16px; margin-top: 6px; }
 
-  .tabs { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
-  .tabs button { border: 0; background: transparent; padding: 10px 22px; border-radius: 999px; cursor: pointer; color: var(--muted); font-weight: 600; }
-  .tabs button.active { background: var(--accent); color: #1a1406; }
+  .tabs { display: flex; background: var(--surface); box-shadow: 0 0 0 1px var(--line-strong) inset; border-radius: 999px; padding: 4px; }
+  .tabs button {
+    border: 0; background: transparent; padding: 10px 22px; border-radius: 999px; cursor: pointer;
+    color: var(--muted); font-weight: 600; font-size: 16px; transition: color .2s, background-color .25s var(--ease-out);
+  }
+  .tabs button:hover { color: var(--text); }
+  .tabs button[aria-selected="true"] { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, 0 4px 14px -4px rgba(0,0,0,.6); }
 
   .view { display: none; }
-  .view.active { display: block; }
+  .view.active { display: block; animation: viewIn .45s var(--ease-out); }
+  @keyframes viewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-  .cols, .row { display: grid; align-items: center; gap: 12px; }
-  .tonight .cols, .tonight .row { grid-template-columns: 64px 1fr 150px 110px 120px; }
-  .month .cols, .month .row { grid-template-columns: 64px 1fr 130px 150px 110px; }
-  .cols { padding: 0 20px 10px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .12em; }
-  .cols .r, .row .r { text-align: right; }
-  .cols .c, .row .c { text-align: center; }
+  /* columns are sized from the view's base size so the larger leader row stays aligned */
+  .view { --fs: clamp(19px, 2.05vw, 27px); }
+  .view.month { --fs: clamp(17px, 1.85vw, 23px); }
+  .cols, .row { display: grid; align-items: center; column-gap: 16px; }
+  .tonight .cols, .tonight .row { grid-template-columns: calc(var(--fs) * 2.2) minmax(0, 1fr) calc(var(--fs) * 6) calc(var(--fs) * 4) calc(var(--fs) * 4.4); }
+  .month .cols, .month .row { grid-template-columns: calc(var(--fs) * 2.2) minmax(0, 1fr) calc(var(--fs) * 4) calc(var(--fs) * 6) calc(var(--fs) * 4.4); }
+  .cols { padding: 0 24px 12px; color: var(--muted); font-size: 15px; font-weight: 500; }
+  .r { text-align: right; justify-self: end; }
+  .c { text-align: center; }
 
-  .board { position: relative; display: flex; flex-direction: column; gap: 10px; }
+  .board { position: relative; display: flex; flex-direction: column; gap: 6px; }
   .row {
     position: relative;
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 14px 20px;
-    font-size: clamp(18px, 2.1vw, 26px);
+    background: var(--surface);
+    border-radius: var(--r-row);
+    padding: 16px 24px;
+    font-size: var(--fs);
+    box-shadow: 0 0 0 1px var(--line) inset;
     will-change: transform;
   }
-  .row .rank { font-weight: 800; font-size: 1.15em; color: var(--muted); font-family: var(--mono); }
-  .row .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row .wdl { font-family: var(--mono); color: var(--muted); }
-  .row .wdl b { color: var(--text); font-weight: 700; }
-  .row .elo { font-family: var(--mono); font-weight: 700; }
-  .row .delta { font-family: var(--mono); font-weight: 700; font-size: .85em; }
-  .row .bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: transparent; }
+  .row .rank { font-family: var(--mono); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .name { font-weight: 600; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .wdl { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; }
+  .row .wdl b { color: var(--text); font-weight: 650; }
+  .row .elo { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; transition: color 1.8s; }
+  .row .chip { font-size: .72em; }
 
-  .row.p1 .bar { background: var(--gold); box-shadow: 0 0 14px var(--gold); }
-  .row.p2 .bar { background: var(--silver); }
-  .row.p3 .bar { background: var(--bronze); }
-  .row.p1 .rank { color: var(--gold); }
+  /* podium */
+  .row.p1 {
+    padding-block: 24px;
+    font-size: calc(var(--fs) * 1.22);
+    background: linear-gradient(100deg, rgba(217,180,95,.13), rgba(217,180,95,.03) 45%, var(--surface) 80%);
+    box-shadow: 0 0 0 1px rgba(217,180,95,.28) inset, 0 18px 40px -20px rgba(217,180,95,.25);
+  }
+  .row.p1 .rank { color: var(--accent); }
+  .row.p1 .name { font-weight: 700; }
   .row.p2 .rank { color: var(--silver); }
   .row.p3 .rank { color: var(--bronze); }
-  .row.p1 { border-color: rgba(245,196,81,.45); }
+  .row.p3 { margin-bottom: 10px; }
 
   /* glow flashes on rating change */
   @keyframes glowUp {
-    0%   { box-shadow: 0 0 0 0 rgba(61,220,132,0); border-color: var(--line); }
-    15%  { box-shadow: 0 0 32px 4px rgba(61,220,132,.55), inset 0 0 22px rgba(61,220,132,.18); border-color: var(--up); }
-    100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); }
+    0%   { box-shadow: 0 0 0 1px var(--line) inset; }
+    12%  { box-shadow: 0 0 0 1.5px var(--up) inset, 0 0 36px 2px rgba(76,200,135,.38), inset 0 0 40px rgba(76,200,135,.12); }
+    100% { box-shadow: 0 0 0 1px var(--line) inset; }
   }
   @keyframes glowDown {
-    0%   { box-shadow: 0 0 0 0 rgba(255,92,108,0); border-color: var(--line); }
-    15%  { box-shadow: 0 0 32px 4px rgba(255,92,108,.5), inset 0 0 22px rgba(255,92,108,.16); border-color: var(--down); }
-    100% { box-shadow: 0 0 0 0 rgba(255,92,108,0); }
+    0%   { box-shadow: 0 0 0 1px var(--line) inset; }
+    12%  { box-shadow: 0 0 0 1.5px var(--down) inset, 0 0 36px 2px rgba(236,100,116,.34), inset 0 0 40px rgba(236,100,116,.1); }
+    100% { box-shadow: 0 0 0 1px var(--line) inset; }
   }
   @keyframes glowNew {
-    0%   { box-shadow: 0 0 32px 4px rgba(245,196,81,.5); opacity: 0; }
-    20%  { opacity: 1; }
-    100% { box-shadow: 0 0 0 0 rgba(245,196,81,0); opacity: 1; }
+    0%   { opacity: 0; transform: translateY(10px); box-shadow: 0 0 0 1.5px var(--accent) inset, 0 0 30px rgba(217,180,95,.35); }
+    30%  { opacity: 1; transform: none; }
+    100% { box-shadow: 0 0 0 1px var(--line) inset; }
   }
-  .row.flash-up   { animation: glowUp 2.2s ease-out; }
-  .row.flash-down { animation: glowDown 2.2s ease-out; }
-  .row.flash-new  { animation: glowNew 1.6s ease-out; }
-  .row.flash-up .elo { color: var(--up); transition: color 2s; }
-  .row.flash-down .elo { color: var(--down); transition: color 2s; }
+  .row.flash-up   { animation: glowUp 2.4s var(--ease-out); }
+  .row.flash-down { animation: glowDown 2.4s var(--ease-out); }
+  .row.flash-new  { animation: glowNew 1.6s var(--ease-out); }
+  .row.flash-up .elo { color: var(--up); transition: none; }
+  .row.flash-down .elo { color: var(--down); transition: none; }
 
-  .empty { text-align: center; color: var(--muted); padding: 60px 20px; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 20px; }
-  .empty a { font-family: var(--mono); }
+  .empty {
+    display: grid; gap: 10px; justify-items: start;
+    padding: 48px 40px; border-radius: var(--r-container);
+    background: var(--surface); box-shadow: 0 0 0 1px var(--line) inset;
+  }
+  .empty h3 { margin: 0; font-size: 26px; letter-spacing: -0.02em; }
+  .empty p { margin: 0; color: var(--muted); font-size: 18px; max-width: 52ch; }
+  .empty code { font-family: var(--mono); color: var(--accent); }
 
-  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin: 18px 4px 0; gap: 12px; flex-wrap: wrap; }
+  .skeleton-row { height: 66px; border-radius: var(--r-row); }
 
-  /* "This Month" — framed for an Instagram screenshot */
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 15px; margin: 20px 24px 0; gap: 12px; flex-wrap: wrap; }
+
+  /* "This month": framed for an Instagram screenshot */
   .month .card {
-    max-width: 920px; margin: 0 auto;
-    background: radial-gradient(800px 400px at 50% -120px, rgba(245,196,81,.10), transparent 70%), var(--bg-2);
-    border: 1px solid var(--line); border-radius: 22px; padding: 34px 30px 26px;
+    max-width: 940px; margin: 0 auto;
+    background:
+      radial-gradient(600px 300px at 0% 0%, rgba(217,180,95,.10), transparent 70%),
+      var(--surface);
+    border-radius: var(--r-container); padding: 40px 36px 30px;
+    box-shadow: 0 0 0 1px var(--line-strong) inset, 0 40px 80px -40px rgba(0,0,0,.8);
   }
-  .month .card-head { text-align: center; margin-bottom: 24px; }
-  .month .card-head .kicker { color: var(--accent); letter-spacing: .3em; text-transform: uppercase; font-size: 13px; font-weight: 700; }
-  .month .card-head h2 { margin: 6px 0 4px; font-size: clamp(28px, 3.6vw, 44px); letter-spacing: -0.02em; }
-  .month .card-head .sub { color: var(--muted); }
-  .month .row { font-size: clamp(17px, 1.9vw, 23px); padding: 12px 18px; }
-  .month .card-foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; letter-spacing: .08em; }
+  .month .card-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .month .card-head h2 { margin: 0; font-size: clamp(36px, 4.6vw, 60px); font-weight: 700; letter-spacing: -0.04em; line-height: .95; }
+  .month .card-head h2 span { color: var(--muted); font-weight: 500; }
+  .month .stats { display: flex; gap: 28px; }
+  .month .stat { text-align: right; }
+  .month .stat b { display: block; font-family: var(--mono); font-size: 28px; font-weight: 600; line-height: 1.1; }
+  .month .stat span { color: var(--muted); font-size: 14px; }
+  .month .cols { padding-inline: 20px; }
+  .month .row { padding: 13px 20px; background: rgba(10,12,17,.55); }
+  .month .row.p1 { font-size: calc(var(--fs) * 1.15); padding-block: 18px; }
+  .month .card-foot { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 15px; margin-top: 22px; padding: 0 4px; }
+  .month .card-foot .who { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-weight: 600; }
+  .month .card-foot .who .glyph { color: var(--accent); }
 
   /* latest result banner */
   .ticker {
-    position: fixed; left: 50%; top: 18px; transform: translate(-50%, -140%);
-    background: var(--panel-2); border: 1px solid var(--accent); border-radius: 999px;
-    padding: 10px 22px; font-size: 20px; font-weight: 600; z-index: 20;
-    box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 24px rgba(245,196,81,.25);
-    transition: transform .45s cubic-bezier(.2,.9,.3,1.2); white-space: nowrap;
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, calc(100% + 40px));
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(23,27,36,.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 0 0 1px rgba(217,180,95,.35) inset, 0 1px 0 rgba(255,255,255,.06) inset, 0 20px 50px -10px rgba(0,0,0,.7);
+    border-radius: 999px; padding: 12px 24px 12px 14px; font-size: 21px; font-weight: 600; z-index: var(--z-overlay);
+    transition: transform .55s cubic-bezier(.2,1.1,.3,1); white-space: nowrap;
   }
   .ticker.show { transform: translate(-50%, 0); }
+  .ticker .tag { font-size: 13px; font-weight: 650; color: var(--accent-ink); background: var(--accent); padding: 4px 10px; border-radius: 999px; }
+  .ticker .chip { font-size: 16px; margin-left: 4px; }
 
-  .conn { position: fixed; right: 12px; bottom: 10px; font-size: 12px; color: var(--muted); }
-  .conn::before { content: "●"; margin-right: 6px; color: var(--up); }
-  .conn.off::before { color: var(--down); }
+  .conn { position: fixed; right: 14px; bottom: 12px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--up); box-shadow: 0 0 10px var(--up); }
+  .conn.off i { background: var(--down); box-shadow: 0 0 10px var(--down); }
 
   body.clean header, body.clean .meta, body.clean .conn { display: none; }
-  body.clean .wrap { padding-top: 40px; }
+  body.clean .wrap { padding-top: 48px; }
 
-  @media (max-width: 720px) {
-    .wrap { padding: 16px 16px 40px; }
-    .tonight .cols, .tonight .row { grid-template-columns: 34px 1fr 90px 64px; }
-    .month .cols, .month .row { grid-template-columns: 34px 1fr 64px 90px; }
-    .tonight .cols > :nth-child(5), .tonight .row > .delta { display: none; }
-    .month .cols > :nth-child(5), .month .row > .delta { display: none; }
-    .row { padding: 12px 14px; font-size: 16px; }
-    .month .card { padding: 22px 12px; }
-    .ticker { font-size: 15px; white-space: normal; width: calc(100vw - 32px); text-align: center; border-radius: 16px; }
+  @media (max-width: 760px) {
+    .wrap { padding: 20px 16px 48px; }
+    header { align-items: flex-start; }
+    .mark { width: 44px; height: 44px; font-size: 24px; border-radius: 12px; }
+    .view, .view.month { --fs: 16px; }
+    .tonight .cols, .tonight .row { grid-template-columns: 1.6rem minmax(0, 1fr) 5.4rem 3.4rem; }
+    .month .cols, .month .row { grid-template-columns: 1.6rem minmax(0, 1fr) 3.4rem 5.4rem; }
+    .cols > :nth-child(5), .row > .chip-cell { display: none; }
+    .cols { padding-inline: 14px; font-size: 13px; }
+    .row, .month .row { padding: 12px 14px; column-gap: 10px; }
+    .row.p1, .month .row.p1 { padding-block: 16px; }
+    .month .card { padding: 24px 12px 18px; }
+    .month .card-head { padding: 0 6px; }
+    .month .stats { gap: 18px; }
+    .ticker { bottom: 16px; font-size: 15px; white-space: normal; width: calc(100vw - 32px); border-radius: 16px; }
   }
 </style>
 </head>
 <body>
-<div class="ticker" id="ticker"></div>
+<div class="ticker" id="ticker" role="status" aria-live="polite"></div>
 
-<div class="wrap">
+<main class="wrap">
   <header>
     <div class="brand">
-      <div class="logo">♞</div>
+      <div class="mark glyph" aria-hidden="true">♞&#xFE0E;</div>
       <div>
         <h1>Chessmates</h1>
-        <div class="sub" id="sessionLabel">Live leaderboard</div>
+        <div class="sub" id="sessionLabel">Connecting…</div>
       </div>
     </div>
-    <nav class="tabs" role="tablist">
-      <button data-tab="tonight" class="active">Tonight</button>
-      <button data-tab="month">This Month</button>
+    <nav class="tabs" role="tablist" aria-label="Leaderboard view">
+      <button role="tab" data-tab="tonight" aria-selected="true">Tonight</button>
+      <button role="tab" data-tab="month" aria-selected="false">This month</button>
     </nav>
   </header>
 
-  <section class="view tonight active" id="view-tonight">
-    <div class="cols"><div>#</div><div>Player</div><div class="c">W-D-L</div><div class="r">Elo</div><div class="r">Tonight</div></div>
+  <section class="view tonight active" id="view-tonight" aria-label="Tonight">
+    <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r">Tonight</div></div>
     <div class="board" id="board-tonight"></div>
-    <div class="meta"><span id="tonightMeta"></span><span>Ranked by wins tonight · Elo breaks ties</span></div>
+    <div class="meta"><span id="tonightMeta"></span><span>Most wins tonight, Elo breaks ties</span></div>
   </section>
 
-  <section class="view month" id="view-month">
-    <div class="card">
+  <section class="view month" id="view-month" aria-label="This month">
+    <article class="card">
       <div class="card-head">
-        <div class="kicker">♞ Chessmates Club</div>
-        <h2 id="monthTitle">This Month</h2>
-        <div class="sub" id="monthSub"></div>
+        <h2 id="monthTitle">This month</h2>
+        <div class="stats">
+          <div class="stat"><b id="monthPlayers">0</b><span>players</span></div>
+          <div class="stat"><b id="monthGames">0</b><span>games</span></div>
+        </div>
       </div>
-      <div class="cols"><div>#</div><div>Player</div><div class="r">Elo</div><div class="c">W-D-L</div><div class="r">+/−</div></div>
+      <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="r">Elo</div><div class="c">W–D–L</div><div class="r">Month</div></div>
       <div class="board" id="board-month"></div>
-      <div class="card-foot">MONDAY NIGHTS · ALL LEVELS WELCOME</div>
-    </div>
+      <div class="card-foot">
+        <span class="who"><span class="glyph">♞&#xFE0E;</span> Chessmates</span>
+        <span>Monday nights · all levels welcome</span>
+      </div>
+    </article>
   </section>
-</div>
-<div class="conn" id="conn">live</div>
+</main>
+<div class="conn" id="conn"><i></i><span>Connecting</span></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -178,11 +229,12 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
   const cls = n => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat');
-  const wdl = r => `<b>${r.w}</b>-${r.d}-${r.l}`;
+  const chip = n => `<span class="chip ${cls(n)}">${signed(n)}</span>`;
+  const wdl = r => `<b>${r.w}</b>–${r.d}–${r.l}`;
 
   function setTab(t) {
     tab = t;
-    document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t));
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -194,25 +246,29 @@
   setTab(tab);
   if (rotateSecs) setInterval(() => setTab(tab === 'tonight' ? 'month' : 'tonight'), rotateSecs * 1000);
 
+  // loading skeleton until the first socket payload arrives
+  for (const id of ['board-tonight', 'board-month']) {
+    document.getElementById(id).innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton skeleton-row"></div>').join('');
+  }
+
   const rowHtml = {
     tonight: (r, i) => `
-      <div class="bar"></div>
       <div class="rank">${i + 1}</div>
       <div class="name">${esc(r.name)}</div>
       <div class="wdl c">${wdl(r)}</div>
       <div class="elo r">${r.elo}</div>
-      <div class="delta r ${cls(r.delta)}">${signed(r.delta)}</div>`,
+      <div class="chip-cell r">${chip(r.delta)}</div>`,
     month: (r, i) => `
-      <div class="bar"></div>
       <div class="rank">${i + 1}</div>
       <div class="name">${esc(r.name)}</div>
       <div class="elo r">${r.elo}</div>
       <div class="wdl c">${wdl(r)}</div>
-      <div class="delta r ${cls(r.delta)}">${signed(r.delta)}</div>`,
+      <div class="chip-cell r">${chip(r.delta)}</div>`,
   };
 
   // FLIP: measure First positions, apply Last layout, Invert with transforms, Play transition.
   function renderBoard(el, rows, kind, emptyHtml) {
+    el.querySelectorAll('.skeleton').forEach(n => n.remove());
     if (!rows.length) { el.innerHTML = `<div class="empty">${emptyHtml}</div>`; return; }
     el.querySelector('.empty')?.remove();
 
@@ -236,7 +292,7 @@
       let flash = null;
       if (isNew && !firstRender) flash = 'flash-new';
       if (before !== undefined && before !== r.elo) flash = r.elo > before ? 'flash-up' : 'flash-down';
-      if (flash) {
+      if (flash && el.offsetParent !== null) { // only flash the visible board
         node.classList.remove('flash-up', 'flash-down', 'flash-new');
         void node.offsetWidth;
         node.classList.add(flash);
@@ -253,24 +309,26 @@
       n.style.transform = `translateY(${dy}px)`;
       n.style.zIndex = dy > 0 ? 2 : 1; // risers slide over fallers
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        n.style.transition = 'transform 900ms cubic-bezier(.22,1,.36,1)';
+        n.style.transition = 'transform 950ms cubic-bezier(.22,1,.36,1)';
         n.style.transform = '';
         n.addEventListener('transitionend', () => { n.style.zIndex = ''; n.style.transition = ''; }, { once: true });
       }));
     });
   }
 
-  // Inactive tab has display:none so positions are 0 — render it without FLIP and let it settle.
   function render(state) {
     const t = state.tonight, m = state.month;
-    document.getElementById('sessionLabel').textContent = t.session ? t.session.label : 'No session yet';
-    document.getElementById('tonightMeta').textContent = t.gameCount ? `${t.gameCount} game${t.gameCount === 1 ? '' : 's'} tonight` : '';
-    document.getElementById('monthTitle').textContent = m.label;
-    document.getElementById('monthSub').textContent = `${m.rows.length} players · ${m.gameCount} games`;
+    document.getElementById('sessionLabel').textContent = t.session ? t.session.label : 'No session started yet';
+    document.getElementById('tonightMeta').textContent = t.gameCount ? `${t.gameCount} game${t.gameCount === 1 ? '' : 's'} played` : '';
+    const [monthName, year] = m.label.split(' ');
+    document.getElementById('monthTitle').innerHTML = `${esc(monthName)} <span>${esc(year || '')}</span>`;
+    document.getElementById('monthPlayers').textContent = m.rows.length;
+    document.getElementById('monthGames').textContent = m.gameCount;
 
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
-      `No games yet tonight.<br>Scan the QR code or open <a href="/log">/log</a> to record one.`);
-    renderBoard(document.getElementById('board-month'), m.rows, 'month', 'No games this month yet.');
+      `<h3>No games yet tonight</h3><p>Scan the QR code or open <code>/log</code> on your phone. The board updates as soon as a result comes in.</p>`);
+    renderBoard(document.getElementById('board-month'), m.rows, 'month',
+      `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`);
 
     for (const p of state.players) prevElo.set(p.id, p.elo);
 
@@ -283,20 +341,20 @@
   let tickerTimer;
   function showTicker(g) {
     const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
-    const a = `${esc(g.p1_name)} <span class="${cls(d1)}">${signed(d1)}</span>`;
-    const b = `${esc(g.p2_name)} <span class="${cls(d2)}">${signed(d2)}</span>`;
+    const a = `${esc(g.p1_name)}${chip(d1)}`;
+    const b = `${esc(g.p2_name)}${chip(d2)}`;
     const txt = g.result === 1 ? `${a} beat ${b}` : g.result === 0 ? `${b} beat ${a}` : `${a} drew with ${b}`;
     const el = document.getElementById('ticker');
-    el.innerHTML = '♟ ' + txt;
+    el.innerHTML = `<span class="tag">Result</span><span>${txt}</span>`;
     el.classList.add('show');
     clearTimeout(tickerTimer);
-    tickerTimer = setTimeout(() => el.classList.remove('show'), 5000);
+    tickerTimer = setTimeout(() => el.classList.remove('show'), 5500);
   }
 
   const socket = io();
   const conn = document.getElementById('conn');
-  socket.on('connect', () => { conn.classList.remove('off'); conn.textContent = 'live'; });
-  socket.on('disconnect', () => { conn.classList.add('off'); conn.textContent = 'reconnecting…'; });
+  socket.on('connect', () => { conn.classList.remove('off'); conn.lastChild.textContent = 'Live'; });
+  socket.on('disconnect', () => { conn.classList.add('off'); conn.lastChild.textContent = 'Reconnecting…'; });
   socket.on('state', render);
 })();
 </script>

@@ -15,6 +15,10 @@ const io = new Server(server);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+// Fonts are self-hosted so the app works on venue Wi-Fi without internet access.
+const fontDir = name => path.dirname(require.resolve(`@fontsource-variable/${name}/package.json`));
+app.use('/fonts/geist', express.static(fontDir('geist'), { maxAge: '30d' }));
+app.use('/fonts/geist-mono', express.static(fontDir('geist-mono'), { maxAge: '30d' }));
 
 function lanIp() {
   if (process.env.HOST_IP) return process.env.HOST_IP;
@@ -60,27 +64,37 @@ app.get('/qr', async (req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Log your game</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/fonts/geist/index.css">
+<link rel="stylesheet" href="/fonts/geist-mono/index.css">
 <style>
-  @page { size: A4; margin: 18mm; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; color: #111; background: #fff;
-         display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px 16px; }
-  h1 { font-size: 44px; margin: 0 0 6px; letter-spacing: -0.02em; }
-  p.sub { font-size: 22px; margin: 0 0 28px; color: #444; }
-  .qr { width: min(80vw, 125mm); }
+  @page { size: A4; margin: 16mm; }
+  body { font-family: "Geist Variable", system-ui, sans-serif; margin: 0; color: #0e1117; background: #fff;
+         display: grid; justify-items: center; padding: 40px 16px; -webkit-font-smoothing: antialiased; }
+  .sheet { width: min(100%, 150mm); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; color: #4a5162; }
+  .brand span { font-family: "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif; font-size: 22px; color: #0e1117; }
+  h1 { font-size: 52px; line-height: 1; letter-spacing: -0.045em; margin: 18px 0 10px; text-wrap: balance; }
+  p.sub { font-size: 20px; margin: 0 0 30px; color: #4a5162; max-width: 34ch; }
+  .qr { border: 1.5px solid #0e1117; border-radius: 20px; padding: 18px; }
   .qr svg { width: 100%; height: auto; display: block; }
-  .url { font: 600 20px ui-monospace, Menlo, monospace; margin-top: 18px; word-break: break-all; }
-  ol { text-align: left; font-size: 18px; line-height: 1.6; margin-top: 24px; }
-  .print { margin-top: 24px; font-size: 16px; padding: 10px 20px; border-radius: 8px; border: 1px solid #999; background: #f4f4f4; cursor: pointer; }
-  @media print { .print { display: none; } }
+  .url { font: 500 17px "Geist Mono Variable", ui-monospace, monospace; margin-top: 14px; word-break: break-all; color: #4a5162; }
+  ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0; margin: 30px 0 0; list-style: none; counter-reset: s; }
+  li { counter-increment: s; font-size: 16px; line-height: 1.35; padding-top: 12px; border-top: 2px solid #0e1117; }
+  li::before { content: counter(s); display: block; font: 600 14px "Geist Mono Variable", monospace; color: #8a90a0; margin-bottom: 4px; }
+  .print { margin-top: 32px; font: inherit; font-weight: 600; padding: 12px 22px; border-radius: 10px; border: 0; background: #0e1117; color: #fff; cursor: pointer; }
+  .print:hover { background: #2a303c; }
+  @media print { .print { display: none; } body { padding: 0; } }
 </style></head>
-<body>
-  <h1>♞ Chessmates</h1>
-  <p class="sub">Finished a game? Scan to log the result.</p>
+<body><main class="sheet">
+  <div class="brand"><span>&#9822;&#65038;</span>Chessmates</div>
+  <h1>Finished a game?</h1>
+  <p class="sub">Scan with your phone camera to log the result on the live leaderboard.</p>
   <div class="qr">${svg}</div>
   <div class="url">${url}</div>
-  <ol><li>Pick both players</li><li>Tap who won (or Draw)</li><li>Watch the leaderboard move</li></ol>
-  <button class="print" onclick="window.print()">Print</button>
-</body></html>`);
+  <ol><li>Pick white and black</li><li>Tap who won, or draw</li><li>Watch the board update</li></ol>
+  <button class="print" onclick="window.print()">Print this page</button>
+</main></body></html>`);
 });
 
 /* ---------- read API ---------- */
@@ -109,6 +123,18 @@ admin.post('/undo', action(() => ({ undone: store.undoLastGame() })));
 admin.post('/sessions', action(req => ({ session: store.startSession(req.body.label) })));
 admin.post('/recalculate', action(() => store.recalculate()));
 app.use('/api/admin', admin);
+
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ ok: false, error: 'Not found' });
+  res.status(404).type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
+<style>main{max-width:520px;margin:0 auto;padding:18vh 20px 40px}h1{font-size:40px;letter-spacing:-.04em;margin:0 0 8px}
+p{color:var(--muted);margin:0 0 24px}nav{display:flex;gap:8px;flex-wrap:wrap}</style></head>
+<body><main><h1>Page not found</h1><p>There is nothing at this address. Try one of these instead.</p>
+<nav><a class="btn primary" href="/log">Log a game</a><a class="btn" href="/display">Leaderboard</a><a class="btn ghost" href="/admin">Admin</a></nav>
+</main></body></html>`);
+});
 
 io.on('connection', socket => socket.emit('state', store.snapshot()));
 

@@ -3,100 +3,149 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0e14">
-<title>Log a Game</title>
+<meta name="theme-color" content="#0a0c11">
+<meta name="description" content="Log a game result for the Chessmates club leaderboard.">
+<title>Log a game</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <style>
-  .wrap { max-width: 520px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
-  h1 { font-size: 26px; margin: 4px 0 2px; letter-spacing: -0.02em; }
-  .sub { color: var(--muted); margin-bottom: 22px; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 28px 16px calc(48px + env(safe-area-inset-bottom)); }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .mark {
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none;
+    background: linear-gradient(160deg, var(--surface-3), var(--surface)); box-shadow: 0 0 0 1px var(--line-strong) inset;
+    font-size: 24px; color: var(--accent);
+  }
+  h1 { font-size: 28px; margin: 0; letter-spacing: -0.03em; line-height: 1.05; }
+  .top p { margin: 3px 0 0; color: var(--muted); font-size: 15px; }
 
-  .slot { margin-bottom: 14px; }
-  .slot label { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
+  .match {
+    background: var(--surface); border-radius: var(--r-container); padding: 18px;
+    box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
+  }
+  .field > label { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .swatch.white { background: #eef1f6; }
+  .swatch.black { background: #05070a; box-shadow: 0 0 0 1px rgba(148,163,184,.45) inset; }
+
   .combo { position: relative; }
-  .combo .input { font-size: 18px; padding: 14px 44px 14px 14px; }
-  .combo.selected .input { border-color: var(--accent); font-weight: 700; }
-  .combo .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 22px; padding: 8px; cursor: pointer; display: none; }
+  .combo .input { font-size: 18px; padding: 14px 46px 14px 14px; }
+  .combo.selected .input { border-color: rgba(217,180,95,.6); background: var(--accent-wash); font-weight: 600; }
+  .combo .clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px; border-radius: 8px; border: 0; background: none; color: var(--muted);
+    font-size: 22px; line-height: 1; cursor: pointer; display: none;
+  }
+  .combo .clear:hover { background: var(--surface-3); color: var(--text); }
   .combo.selected .clear { display: block; }
   .list {
-    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10;
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
-    max-height: 46vh; overflow-y: auto; display: none; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: var(--z-overlay);
+    background: var(--surface-2); border-radius: var(--r-row); padding: 4px;
+    box-shadow: 0 0 0 1px var(--line-strong) inset, 0 24px 48px -12px rgba(0,0,0,.75);
+    max-height: 46dvh; overflow-y: auto; display: none;
   }
-  .combo.open .list { display: block; }
-  .list button { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 14px; border: 0; border-bottom: 1px solid var(--line); background: none; font-size: 17px; cursor: pointer; }
-  .list button:last-child { border-bottom: 0; }
-  .list button:hover, .list button:focus { background: var(--panel); outline: none; }
-  .list .elo { color: var(--muted); font-family: var(--mono); font-size: 15px; }
-  .list .none { padding: 14px; color: var(--muted); }
+  .combo.open .list { display: block; animation: drop .18s var(--ease-out); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .list button {
+    display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left;
+    padding: 13px 12px; border: 0; border-radius: 8px; background: none; font-size: 17px; cursor: pointer;
+  }
+  .list button:hover, .list button:focus-visible { background: var(--surface-3); outline: none; }
+  .list .num { color: var(--muted); font-size: 15px; }
+  .list .none { padding: 14px 12px; color: var(--muted); font-size: 15px; }
 
-  .vs { text-align: center; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
+  .vs {
+    display: flex; align-items: center; gap: 12px; margin: 12px 0; color: var(--muted); font-size: 14px; font-weight: 600;
+  }
+  .vs::before, .vs::after { content: ""; flex: 1; height: 1px; background: var(--line-strong); }
 
-  .results { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 22px; }
-  .results .btn { padding: 18px 14px; font-size: 18px; font-weight: 700; border-radius: 14px; }
-  .results .win { border-color: rgba(61,220,132,.4); }
-  .results .draw { color: var(--draw); }
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+  .results .btn { padding: 18px 12px; font-size: 17px; font-weight: 650; border-radius: var(--r-row); min-width: 0; }
+  .results .win { flex-direction: column; gap: 2px; padding: 14px 12px; }
+  .results .win b { font-weight: 650; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .results .win small { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .results .draw { grid-column: 1 / -1; order: 3; padding: 14px; color: var(--text-2); font-weight: 600; }
+  .results .win:not(:disabled):hover { border-color: rgba(76,200,135,.45); background: var(--up-wash); }
+  .hint { color: var(--muted); font-size: 14px; margin: 12px 2px 0; min-height: 1.3em; }
+  .hint.err { color: var(--down); }
 
-  .newbie { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
-  .newbie .row { display: flex; gap: 8px; margin-top: 10px; }
+  .newbie { margin-top: 26px; padding: 0 2px; }
+  .newbie p { margin: 0; color: var(--muted); }
+  .newbie form { display: grid; gap: 8px; margin-top: 12px; }
+  .newbie .row { display: flex; gap: 8px; }
   .newbie .row .input { flex: 1; min-width: 0; }
 
-  .done { display: none; text-align: center; padding: 28px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; margin-top: 10px; }
-  .done.show { display: block; animation: pop .35s ease-out; }
-  @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
-  .done .big { font-size: 22px; font-weight: 800; margin: 6px 0 16px; }
-  .done .line { display: flex; justify-content: space-between; font-size: 18px; padding: 10px 4px; border-top: 1px solid var(--line); }
-  .done .line .mono { font-weight: 700; }
-  .done .btn { margin-top: 18px; width: 100%; padding: 14px; font-size: 17px; }
-  .form.hidden { display: none; }
+  .done {
+    display: none; padding: 26px 20px 20px; background: var(--surface); border-radius: var(--r-container);
+    box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
+  }
+  .done.show { display: block; animation: pop .4s var(--ease-out); }
+  @keyframes pop { from { transform: translateY(8px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .done .saved { display: inline-flex; align-items: center; gap: 8px; color: var(--up); font-size: 14px; font-weight: 600; }
+  .done .saved::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--up); box-shadow: 0 0 10px var(--up); }
+  .done .big { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 8px 0 18px; text-wrap: balance; }
+  .done .line { display: flex; justify-content: space-between; align-items: center; font-size: 18px; padding: 12px 2px; border-top: 1px solid var(--line-strong); }
+  .done .line .elo { color: var(--muted); font-family: var(--mono); font-size: 15px; margin-right: 10px; }
+  .done .btn { margin-top: 18px; width: 100%; padding: 15px; font-size: 17px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>♞ Log a game</h1>
-  <div class="sub">Pick both players, then tap the result.</div>
-
-  <div class="form" id="form">
-    <div class="slot">
-      <label for="p1">Player 1 · White</label>
-      <div class="combo" id="c1">
-        <input class="input" id="p1" placeholder="Search name…" autocomplete="off" autocapitalize="words">
-        <button class="clear" aria-label="Clear">×</button>
-        <div class="list"></div>
-      </div>
-    </div>
-    <div class="vs">vs</div>
-    <div class="slot">
-      <label for="p2">Player 2 · Black</label>
-      <div class="combo" id="c2">
-        <input class="input" id="p2" placeholder="Search name…" autocomplete="off" autocapitalize="words">
-        <button class="clear" aria-label="Clear">×</button>
-        <div class="list"></div>
-      </div>
-    </div>
-
-    <div class="results">
-      <button class="btn win" data-result="1" disabled>Player 1 won</button>
-      <button class="btn draw" data-result="0.5" disabled>Draw</button>
-      <button class="btn win" data-result="0" disabled>Player 2 won</button>
-    </div>
-
-    <div class="newbie">
-      <button class="btn" id="newBtn" style="width:100%">🙋 I'm new — add my name</button>
-      <div class="row" id="newRow" hidden>
-        <input class="input" id="newName" placeholder="Your name" maxlength="40" autocapitalize="words">
-        <button class="btn primary" id="newSave">Add</button>
-      </div>
+<main class="wrap">
+  <div class="top">
+    <div class="mark glyph" aria-hidden="true">♞&#xFE0E;</div>
+    <div>
+      <h1>Log a game</h1>
+      <p>Pick both players, then tap the result.</p>
     </div>
   </div>
 
-  <div class="done" id="done">
-    <div>Result saved ✓</div>
+  <div id="form">
+    <section class="match">
+      <div class="field">
+        <label for="p1"><span class="swatch white"></span>White</label>
+        <div class="combo" id="c1">
+          <input class="input" id="p1" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
+          <button class="clear" type="button" aria-label="Clear white player">×</button>
+          <div class="list" role="listbox"></div>
+        </div>
+      </div>
+      <div class="vs">vs</div>
+      <div class="field">
+        <label for="p2"><span class="swatch black"></span>Black</label>
+        <div class="combo" id="c2">
+          <input class="input" id="p2" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
+          <button class="clear" type="button" aria-label="Clear black player">×</button>
+          <div class="list" role="listbox"></div>
+        </div>
+      </div>
+
+      <div class="results">
+        <button class="btn win" data-result="1" disabled><b>White</b><small>wins</small></button>
+        <button class="btn win" data-result="0" disabled><b>Black</b><small>wins</small></button>
+        <button class="btn draw" data-result="0.5" disabled>Draw</button>
+      </div>
+      <p class="hint" id="hint" aria-live="polite">Choose two players to enable the result buttons.</p>
+    </section>
+
+    <section class="newbie">
+      <p>Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
+      <form id="newForm" hidden>
+        <div class="row">
+          <input class="input" id="newName" placeholder="First and last name" maxlength="40" autocapitalize="words" aria-label="Your name" required>
+          <button class="btn primary" type="submit">Add</button>
+        </div>
+        <p class="error-text" id="newErr" aria-live="polite"></p>
+      </form>
+    </section>
+  </div>
+
+  <section class="done" id="done" aria-live="polite">
+    <span class="saved">Saved to the leaderboard</span>
     <div class="big" id="doneTitle"></div>
     <div id="doneLines"></div>
     <button class="btn primary" id="again">Log another game</button>
-  </div>
-</div>
+  </section>
+</main>
 <div class="toast" id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -106,17 +155,21 @@
   const picked = { c1: null, c2: null };
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const byId = id => players.find(p => p.id === id);
+  const hint = document.getElementById('hint');
 
-  function toast(msg, err) {
+  function toast(msg) {
     const t = document.getElementById('toast');
-    t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('show');
+    t.textContent = msg; t.classList.add('show');
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
   }
 
   async function post(url, body) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch { throw new Error('Could not reach the club laptop. Check you are on the same Wi-Fi.'); }
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Something went wrong');
+    if (!data.ok) throw new Error(data.error || 'That did not save. Try again.');
     return data;
   }
 
@@ -125,6 +178,7 @@
     const input = root.querySelector('input');
     const list = root.querySelector('.list');
     const other = key === 'c1' ? 'c2' : 'c1';
+    const open = v => { root.classList.toggle('open', v); input.setAttribute('aria-expanded', v); };
 
     function draw() {
       const q = input.value.trim().toLowerCase();
@@ -136,8 +190,8 @@
           return (bs - as) || a.name.localeCompare(b.name);
         });
       list.innerHTML = items.length
-        ? items.map(p => `<button type="button" data-id="${p.id}"><span>${esc(p.name)}</span><span class="elo">${p.elo}</span></button>`).join('')
-        : `<div class="none">No match. New here? Use “I'm new” below.</div>`;
+        ? items.map(p => `<button type="button" role="option" data-id="${p.id}"><span>${esc(p.name)}</span><span class="num">${p.elo}</span></button>`).join('')
+        : `<div class="none">${players.length ? 'No one by that name. Use “Add your name” below.' : 'No players yet. Add your name below.'}</div>`;
     }
 
     function select(id) {
@@ -145,29 +199,33 @@
       const p = byId(id);
       input.value = p ? p.name : '';
       root.classList.toggle('selected', !!p);
-      root.classList.remove('open');
+      open(false);
       input.blur();
       refreshButtons();
     }
     root._select = select;
     root._draw = draw;
 
-    input.addEventListener('focus', () => { if (picked[key]) input.select(); draw(); root.classList.add('open'); });
-    input.addEventListener('input', () => { picked[key] = null; root.classList.remove('selected'); refreshButtons(); draw(); root.classList.add('open'); });
+    input.addEventListener('focus', () => { if (picked[key]) input.select(); draw(); open(true); });
+    input.addEventListener('input', () => { picked[key] = null; root.classList.remove('selected'); refreshButtons(); draw(); open(true); });
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') { const first = list.querySelector('button'); if (first) select(Number(first.dataset.id)); }
-      if (e.key === 'Escape') { root.classList.remove('open'); input.blur(); }
+      if (e.key === 'Escape') { open(false); input.blur(); }
     });
     // pointerdown (not click) so selection lands before the input's blur closes the list
     list.addEventListener('pointerdown', e => {
       const b = e.target.closest('button[data-id]');
       if (b) { e.preventDefault(); select(Number(b.dataset.id)); }
     });
+    list.addEventListener('keydown', e => {
+      const b = e.target.closest('button[data-id]');
+      if (b && e.key === 'Enter') { e.preventDefault(); select(Number(b.dataset.id)); }
+    });
     root.querySelector('.clear').addEventListener('click', () => { select(null); input.focus(); });
     input.addEventListener('blur', () => setTimeout(() => {
-      root.classList.remove('open');
-      if (!picked[key]) input.value = '';
-      else input.value = byId(picked[key])?.name || '';
+      if (root.contains(document.activeElement)) return;
+      open(false);
+      input.value = picked[key] ? byId(picked[key])?.name || '' : '';
     }, 120));
   }
   setupCombo('c1');
@@ -177,8 +235,10 @@
     const a = byId(picked.c1), b = byId(picked.c2);
     const ready = !!(a && b);
     document.querySelectorAll('.results .btn').forEach(btn => btn.disabled = !ready);
-    document.querySelector('[data-result="1"]').textContent = a ? `${a.name} won` : 'Player 1 won';
-    document.querySelector('[data-result="0"]').textContent = b ? `${b.name} won` : 'Player 2 won';
+    document.querySelector('[data-result="1"] b').textContent = a ? a.name : 'White';
+    document.querySelector('[data-result="0"] b').textContent = b ? b.name : 'Black';
+    hint.classList.remove('err');
+    hint.textContent = ready ? '' : 'Choose two players to enable the result buttons.';
   }
 
   let busy = false;
@@ -186,21 +246,25 @@
     if (busy) return;
     busy = true;
     document.querySelectorAll('.results .btn').forEach(b => b.disabled = true);
+    hint.classList.remove('err'); hint.textContent = 'Saving…';
     try {
       const { game } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result: Number(btn.dataset.result) });
       showDone(game);
-    } catch (err) { toast(err.message, true); refreshButtons(); }
+    } catch (err) {
+      refreshButtons();
+      hint.classList.add('err'); hint.textContent = err.message;
+    }
     busy = false;
   }));
 
   function showDone(g) {
     const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
-    const s = n => `<span class="mono ${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`;
+    const chip = n => `<span class="chip ${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`;
+    const line = (name, elo, d) => `<div class="line"><span>${esc(name)}</span><span><span class="elo">${elo}</span>${chip(d)}</span></div>`;
     document.getElementById('doneTitle').textContent =
-      g.result === 1 ? `${g.p1} beat ${g.p2}` : g.result === 0 ? `${g.p2} beat ${g.p1}` : `${g.p1} drew with ${g.p2}`;
-    document.getElementById('doneLines').innerHTML =
-      `<div class="line"><span>${esc(g.p1)}</span>${s(d1)}</div><div class="line"><span>${esc(g.p2)}</span>${s(d2)}</div>`;
-    document.getElementById('form').classList.add('hidden');
+      g.result === 1 ? `${g.p1} beat ${g.p2}` : g.result === 0 ? `${g.p2} beat ${g.p1}` : `${g.p1} and ${g.p2} drew`;
+    document.getElementById('doneLines').innerHTML = line(g.p1, g.p1_elo, d1) + line(g.p2, g.p2_elo, d2);
+    document.getElementById('form').hidden = true;
     document.getElementById('done').classList.add('show');
   }
 
@@ -208,24 +272,26 @@
     document.getElementById('c1')._select(null);
     document.getElementById('c2')._select(null);
     document.getElementById('done').classList.remove('show');
-    document.getElementById('form').classList.remove('hidden');
+    document.getElementById('form').hidden = false;
     window.scrollTo(0, 0);
   });
 
-  const newBtn = document.getElementById('newBtn'), newRow = document.getElementById('newRow'), newName = document.getElementById('newName');
-  newBtn.addEventListener('click', () => { newBtn.hidden = true; newRow.hidden = false; newName.focus(); });
-  async function addNew() {
+  const newBtn = document.getElementById('newBtn'), newForm = document.getElementById('newForm');
+  const newName = document.getElementById('newName'), newErr = document.getElementById('newErr');
+  newBtn.addEventListener('click', () => { newForm.hidden = false; newBtn.closest('p').hidden = true; newName.focus(); });
+  newName.addEventListener('input', () => { newErr.textContent = ''; });
+  newForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!newName.value.trim()) { newErr.textContent = 'Enter your name first.'; return; }
     try {
       const { player } = await post('/api/players', { name: newName.value });
       players.push({ id: player.id, name: player.name, elo: Math.round(player.elo) });
       const slot = !picked.c1 ? 'c1' : !picked.c2 ? 'c2' : null;
       if (slot) document.getElementById(slot)._select(player.id);
-      toast(`Welcome, ${player.name}! Starting Elo 1000`);
-      newName.value = ''; newRow.hidden = true; newBtn.hidden = false;
-    } catch (err) { toast(err.message, true); }
-  }
-  document.getElementById('newSave').addEventListener('click', addNew);
-  newName.addEventListener('keydown', e => { if (e.key === 'Enter') addNew(); });
+      toast(`Welcome, ${player.name}. You start at 1000.`);
+      newName.value = ''; newForm.hidden = true; newBtn.closest('p').hidden = false;
+    } catch (err) { newErr.textContent = err.message; }
+  });
 
   const socket = io();
   socket.on('state', s => {
