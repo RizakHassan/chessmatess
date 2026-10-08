@@ -33,12 +33,7 @@
   .current b { font-size: 17px; }
 
   .pin { max-width: 420px; margin: 8vh auto 0; }
-  .backup-list { list-style: none; margin: 0; padding: 0; }
-  .backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .backup-list li:last-child { border-bottom: 0; }
-  .backup-list .why { color: var(--muted); }
-  .folder { margin: 10px 0 0; word-break: break-all; }
-  .folder code { font-family: var(--mono); font-size: 13px; color: var(--text-2); }
+  .code { font-size: 22px; letter-spacing: .12em; }
 
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -75,14 +70,14 @@
     </div>
     <nav aria-label="Pages">
       <a class="btn ghost small" href="/display" target="_blank">Display ↗</a>
-      <a class="btn ghost small" href="/log" target="_blank">Log page ↗</a>
+      <a class="btn ghost small" id="navLog" href="/log" target="_blank">Log page ↗</a>
       <a class="btn ghost small" href="/qr" target="_blank">Print QR ↗</a>
     </nav>
   </header>
 
   <form class="panel pin" id="pinForm" hidden>
     <h2>Enter admin PIN</h2>
-    <p class="lead">This club laptop has an admin PIN set.</p>
+    <p class="lead" id="pinLead">Enter the PIN you set as the ADMIN_PIN secret in Cloudflare. This device will remember it.</p>
     <div class="inline">
       <input class="input" id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" aria-label="Admin PIN">
       <button class="btn primary" type="submit">Unlock</button>
@@ -113,14 +108,24 @@
       </section>
 
       <section class="panel">
-        <h2>Backups</h2>
-        <p class="lead">Saved automatically when the app starts, before each new session, every 10 minutes after a change, and when you stop it with Ctrl+C. The newest 20 are kept.</p>
-        <div class="current" id="backupInfo"><span class="muted">Loading…</span></div>
-        <div class="actions" style="margin-bottom: 10px">
-          <button class="btn primary" id="backupNow">Back up now</button>
+        <h2>Club code</h2>
+        <p class="lead">The QR code includes this code, so only people who scan it at the club can log games. If it leaks, change it and print a new QR. Phones that already scanned the old one will be asked to scan again.</p>
+        <div class="current"><b class="mono code" id="clubCode">········</b><a class="muted" id="logLink" href="/log" target="_blank">Open log page ↗</a></div>
+        <div class="actions">
+          <a class="btn primary" href="/qr" target="_blank">Print QR ↗</a>
+          <button class="btn danger" id="newCode" data-confirm="Change it?">Change code</button>
         </div>
-        <ul class="backup-list" id="backupList"></ul>
-        <p class="muted folder" id="backupDir"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Backups</h2>
+        <p class="lead">Cloudflare keeps 30 days of history for the club database automatically. Download an export now and then to keep your own copy somewhere else.</p>
+        <div class="actions">
+          <button class="btn primary" id="exportBtn">Download export</button>
+          <label class="btn ghost" for="importFile">Restore from export…</label>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+        <p class="muted" id="importInfo" style="margin: 12px 0 0"></p>
       </section>
 
       <section class="panel">
@@ -153,14 +158,14 @@
 </main>
 <div class="toast" id="toast"></div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="/live.js"></script>
 <script>
 (() => {
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const signed = n => { n = Math.round(n); return `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`; };
   const resText = r => r === 1 ? '1–0' : r === 0 ? '0–1' : '½–½';
   let pin = '';
-  try { pin = sessionStorage.getItem('adminPin') || ''; } catch {}
+  try { pin = localStorage.getItem('adminPin') || ''; } catch {}
   let editing = null; // player id being renamed — skip live re-renders of that table meanwhile
 
   function toast(msg, err) {
@@ -176,30 +181,31 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401) throw new PinRequired('Admin PIN required');
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from the server' }));
+    if (res.status === 503 || res.status === 429) throw new PinRequired(data.error);
     if (data && data.ok === false) throw new Error(data.error);
     return data;
   }
   const run = fn => async (...a) => {
     try { await fn(...a); }
-    catch (e) { if (e instanceof PinRequired) showPin(); else toast(e.message, true); }
+    catch (e) { if (e instanceof PinRequired) showPin(false, e.message); else toast(e.message, true); }
   };
 
-  function showPin(wrong) {
+  function showPin(wrong, message) {
     document.getElementById('app').hidden = true;
     document.getElementById('pinForm').hidden = false;
-    document.getElementById('pinErr').textContent = wrong ? 'That PIN is not right.' : '';
+    document.getElementById('pinErr').textContent = message && message !== 'Admin PIN required' ? message : wrong ? 'That PIN is not right.' : '';
     document.getElementById('pinInput').focus();
   }
   document.getElementById('pinForm').addEventListener('submit', async e => {
     e.preventDefault();
     pin = document.getElementById('pinInput').value;
-    try { sessionStorage.setItem('adminPin', pin); } catch {}
+    try { localStorage.setItem('adminPin', pin); } catch {}
     try {
       await load();
       document.getElementById('pinForm').hidden = true;
       document.getElementById('app').hidden = false;
-    } catch (err) { if (err instanceof PinRequired) showPin(true); else toast(err.message, true); }
+    } catch (err) { if (err instanceof PinRequired) showPin(true, err.message); else toast(err.message, true); }
   });
 
   // Destructive buttons need a second tap within 3s instead of a browser confirm() popup.
@@ -217,7 +223,7 @@
     renderSession(session);
     if (editing === null) renderPlayers(players);
     renderGames(games);
-    renderBackups(await api('GET', '/backups'));
+    renderCode((await api('GET', '/club-code')).code);
   }
 
   function renderSession(s) {
@@ -260,34 +266,48 @@
     }).join('') || `<tr class="empty-row"><td colspan="5">Games appear here as soon as someone logs one.</td></tr>`;
   }
 
-  const reasons = { startup: 'App started', 'session-end': 'Before new session', auto: 'Automatic', manual: 'Manual', shutdown: 'App stopped' };
-  const when = iso => new Date(iso).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  function renderBackups({ dir, backups }) {
-    const latest = backups[0];
-    document.getElementById('backupInfo').innerHTML = latest
-      ? `<b>Last backup ${esc(when(latest.created_at))}</b><span class="muted">${backups.length} kept</span>`
-      : '<span class="muted">No backups yet. The first one is made once there is data.</span>';
-    document.getElementById('backupList').innerHTML = backups.slice(0, 5).map(b => {
-      const why = reasons[b.name.replace(/^chessmates-[\d-T]+-/, '').replace(/\.db$/, '')] || 'Backup';
-      return `<li><span>${esc(when(b.created_at))} <span class="why">· ${esc(why)} · ${Math.max(1, Math.round(b.size / 1024))} KB</span></span>
-        <button class="btn ghost small" data-download="${esc(b.name)}">Download</button></li>`;
-    }).join('');
-    document.getElementById('backupDir').innerHTML = `Folder: <code>${esc(dir)}</code>`;
+  function renderCode(code) {
+    document.getElementById('clubCode').textContent = code;
+    document.getElementById('logLink').href = '/log?c=' + encodeURIComponent(code);
+    document.getElementById('navLog').href = '/log?c=' + encodeURIComponent(code);
   }
 
-  document.getElementById('backupNow').addEventListener('click', run(async () => {
-    await api('POST', '/backups'); toast('Backup saved'); await load();
+  document.getElementById('newCode').addEventListener('click', run(async e => {
+    if (!armed(e.currentTarget)) return;
+    renderCode((await api('POST', '/club-code')).code);
+    toast('Code changed. Print the new QR code.');
   }));
-  // Downloads go through fetch so the admin PIN header is sent.
-  document.getElementById('backupList').addEventListener('click', run(async e => {
-    const btn = e.target.closest('[data-download]'); if (!btn) return;
-    const res = await fetch('/api/admin/backups/' + encodeURIComponent(btn.dataset.download), { headers: { 'x-admin-pin': pin } });
+
+  // Export goes through fetch so the admin PIN header is sent.
+  document.getElementById('exportBtn').addEventListener('click', run(async () => {
+    const res = await fetch('/api/admin/export', { headers: { 'x-admin-pin': pin } });
     if (res.status === 401) throw new PinRequired();
-    if (!res.ok) throw new Error('Could not download that backup');
+    if (!res.ok) throw new Error('Could not download the export');
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'chessmates-export.json';
     const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement('a'), { href: url, download: btn.dataset.download });
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }));
+
+  const importFile = document.getElementById('importFile');
+  const importInfo = document.getElementById('importInfo');
+  let pendingImport = null;
+  importFile.addEventListener('change', run(async () => {
+    const file = importFile.files[0]; importFile.value = '';
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { throw new Error('That file is not valid JSON'); }
+    if (data.format !== 'chessmates-export') throw new Error('That file is not a Chessmates export');
+    pendingImport = data;
+    importInfo.innerHTML = `<b>${esc(file.name)}</b>: ${data.players.length} players, ${data.games.length} games. This replaces everything currently in the club. <button class="btn danger small" id="confirmImport" data-confirm="Replace all data?">Restore</button>`;
+  }));
+  importInfo.addEventListener('click', run(async e => {
+    const btn = e.target.closest('#confirmImport'); if (!btn || !armed(btn)) return;
+    const { imported } = await api('POST', '/import', pendingImport);
+    pendingImport = null;
+    importInfo.textContent = `Restored ${imported.players} players and ${imported.games} games.`;
+    await load();
   }));
 
   function startRename(tr) {
@@ -354,7 +374,7 @@
   document.getElementById('showRemoved').addEventListener('change', run(load));
 
   // Any change from anywhere (phones logging games) refreshes the admin view.
-  io().on('state', run(load));
+  live(run(load));
 })();
 </script>
 </body>

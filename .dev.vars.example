@@ -1,0 +1,2 @@
+# Local development secrets for `npm run dev` (copy to .dev.vars, which git ignores).
+ADMIN_PIN=change-me

@@ -2,11 +2,12 @@
   "name": "chessmates-leaderboard",
   "version": "1.0.0",
   "description": "Live Elo leaderboard for a weekly chess club",
-  "main": "src/server.js",
+  "main": "src/worker.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "node --test test/*.test.js"
+    "dev": "wrangler dev --ip 0.0.0.0",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js",
+    "export-sqlite": "node scripts/export-sqlite.js"
   },
   "repository": {
     "type": "git",
@@ -17,16 +18,13 @@
     "url": "https://github.com/RizakHassan/chessmatess/issues"
   },
   "homepage": "https://github.com/RizakHassan/chessmatess#readme",
-  "dependencies": {
-    "@fontsource-variable/geist": "^5.3.0",
-    "@fontsource-variable/geist-mono": "^5.3.0",
-    "better-sqlite3": "^13.0.3",
-    "express": "^5.2.1",
-    "qrcode": "^1.5.4",
-    "socket.io": "^4.8.4"
-  },
   "private": true,
   "engines": {
-    "node": ">=18"
-  }
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^13.0.3",
+    "wrangler": "^4.148.0"
+  },
+  "type": "module"
 }

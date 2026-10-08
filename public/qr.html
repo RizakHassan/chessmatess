@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Log your game</title>
+<link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  @page { size: A4; margin: 16mm; }
+  body { display: grid; justify-items: center; }
+  .sheet { width: min(100% - 32px, 150mm); padding: 36px 0 48px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand .logo { width: 64px; height: 64px; }
+  .brand .wordmark { font-size: 22px; }
+  h1 { font-size: 52px; line-height: 1; letter-spacing: -0.045em; margin: 18px 0 10px; }
+  p.sub { font-size: 20px; margin: 0 0 30px; color: var(--slate); max-width: 34ch; }
+  .qr { background: #fff; border: 3px solid var(--slate); border-radius: 20px; padding: 18px; box-shadow: 10px 10px 0 var(--sky); }
+  .qr svg { width: 100%; height: auto; display: block; }
+  .url { font: 500 15px var(--mono); margin-top: 14px; word-break: break-all; color: var(--slate); }
+  ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0; margin: 30px 0 0; list-style: none; counter-reset: s; }
+  li { counter-increment: s; font-size: 16px; line-height: 1.35; padding-top: 12px; border-top: 3px solid var(--orange); }
+  li::before { content: counter(s); display: block; font: 600 14px var(--mono); color: var(--slate); margin-bottom: 4px; }
+  .print { margin-top: 32px; }
+  .pin { margin-top: 30px; padding: 22px; background: var(--surface); border-radius: var(--r-container); box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); }
+  .pin h2 { margin: 0 0 6px; font-size: 20px; }
+  .pin p { margin: 0 0 14px; color: var(--text-2); }
+  .pin .row { display: flex; gap: 8px; }
+  .pin .input { flex: 1; min-width: 0; }
+  @media print {
+    body::before, .print, .pin { display: none; }
+    body { background: #fff; }
+    .sheet { padding: 0; }
+  }
+  @media (max-width: 520px) { h1 { font-size: 40px; } ol { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="brand"><img class="logo" src="/logo.png" alt="Chessmates logo"><span class="wordmark">Chessmates</span></div>
+  <h1>Finished a game?</h1>
+  <p class="sub">Scan with your phone camera to log the result on the live leaderboard.</p>
+
+  <form class="pin" id="pinForm" hidden>
+    <h2>Admin PIN needed</h2>
+    <p>The QR code contains the club code, so printing it needs the admin PIN.</p>
+    <div class="row">
+      <input class="input" id="pinInput" type="password" autocomplete="current-password" aria-label="Admin PIN">
+      <button class="btn primary" type="submit">Show QR</button>
+    </div>
+    <p class="error-text" id="pinErr" aria-live="polite"></p>
+  </form>
+
+  <div id="sheet" hidden>
+    <div class="qr" id="qr"></div>
+    <div class="url" id="url"></div>
+    <ol><li>Pick white and black</li><li>Tap who won, or draw</li><li>Watch the board update</li></ol>
+    <button class="btn primary print" onclick="window.print()">Print this page</button>
+  </div>
+</main>
+
+<script src="/vendor/qrcode.js"></script>
+<script>
+(() => {
+  let pin = '';
+  try { pin = localStorage.getItem('adminPin') || ''; } catch {}
+
+  async function show() {
+    const res = await fetch('/api/admin/club-code', { headers: { 'x-admin-pin': pin } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      document.getElementById('pinForm').hidden = false;
+      document.getElementById('pinErr').textContent = res.status === 401 ? (pin ? 'That PIN is not right.' : '') : (data.error || 'Something went wrong.');
+      document.getElementById('pinInput').focus();
+      return;
+    }
+    const url = `${location.origin}/log?c=${encodeURIComponent(data.code)}`;
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code linking to the Chessmates log page' });
+    document.getElementById('url').textContent = url;
+    document.getElementById('pinForm').hidden = true;
+    document.getElementById('sheet').hidden = false;
+  }
+
+  document.getElementById('pinForm').addEventListener('submit', e => {
+    e.preventDefault();
+    pin = document.getElementById('pinInput').value;
+    try { localStorage.setItem('adminPin', pin); } catch {}
+    show();
+  });
+  show();
+})();
+</script>
+</body>
+</html>

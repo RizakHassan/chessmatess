@@ -7,3 +7,6 @@ node_modules/
 .DS_Store
 npm-debug.log*
 backups/
+.wrangler/
+.dev.vars
+chessmates-export*.json

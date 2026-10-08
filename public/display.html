@@ -212,7 +212,7 @@
 </main>
 <div class="conn" id="conn"><i></i><span>Connecting</span></div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="/live.js"></script>
 <script>
 (() => {
   const params = new URLSearchParams(location.search);
@@ -324,7 +324,7 @@
     document.getElementById('monthGames').textContent = m.gameCount;
 
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
-      `<h3>No games yet tonight</h3><p>Scan the QR code or open <code>/log</code> on your phone. The board updates as soon as a result comes in.</p>`);
+      `<h3>No games yet tonight</h3><p>Scan the QR code at the club with your phone to log a result. The board updates as soon as one comes in.</p>`);
     renderBoard(document.getElementById('board-month'), m.rows, 'month',
       `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`);
 
@@ -349,11 +349,11 @@
     tickerTimer = setTimeout(() => el.classList.remove('show'), 5500);
   }
 
-  const socket = io();
   const conn = document.getElementById('conn');
-  socket.on('connect', () => { conn.classList.remove('off'); conn.lastChild.textContent = 'Live'; });
-  socket.on('disconnect', () => { conn.classList.add('off'); conn.lastChild.textContent = 'Reconnecting…'; });
-  socket.on('state', render);
+  live(render, { onStatus: s => {
+    conn.classList.toggle('off', s !== 'live');
+    conn.lastChild.textContent = s === 'live' ? 'Live' : 'Reconnecting…';
+  } });
 })();
 </script>
 </body>

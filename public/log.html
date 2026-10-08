@@ -74,6 +74,13 @@
   .newbie .row { display: flex; gap: 8px; }
   .newbie .row .input { flex: 1; min-width: 0; }
 
+  .locked {
+    padding: 24px 20px; background: var(--surface); border-radius: var(--r-container);
+    box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); border-top: 6px solid var(--orange);
+  }
+  .locked h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
+  .locked p { margin: 0; color: var(--text-2); }
+
   .done {
     display: none; padding: 24px 20px 20px; background: var(--surface); border-radius: var(--r-container);
     box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
@@ -97,7 +104,12 @@
       <h1>Log a game</h1>
     </div>
   </div>
-  <p class="lead">Pick both players, then tap the result.</p>
+  <p class="lead" id="lead">Pick both players, then tap the result.</p>
+
+  <section class="locked" id="locked" hidden>
+    <h2>Scan the club QR code</h2>
+    <p id="lockedMsg">Logging games needs the QR code on the table at the club. Scan it with your phone camera and this page will open ready to go.</p>
+  </section>
 
   <div id="form">
     <section class="match">
@@ -148,7 +160,7 @@
 </main>
 <div class="toast" id="toast"></div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="/live.js"></script>
 <script>
 (() => {
   let players = [];
@@ -163,15 +175,38 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800);
   }
 
+  // The club code arrives in the QR link (?c=CODE) and is remembered on this phone.
+  const store = { get: () => { try { return localStorage.getItem('clubCode') || ''; } catch { return ''; } },
+                  set: v => { try { v ? localStorage.setItem('clubCode', v) : localStorage.removeItem('clubCode'); } catch {} } };
+  const params = new URLSearchParams(location.search);
+  if (params.get('c')) {
+    store.set(params.get('c').trim().toUpperCase());
+    history.replaceState(null, '', location.pathname);
+  }
+  let clubCode = store.get();
+
+  function lock(message) {
+    store.set(''); clubCode = '';
+    if (message) document.getElementById('lockedMsg').textContent = message;
+    document.getElementById('locked').hidden = false;
+    document.getElementById('lead').hidden = true;
+    document.getElementById('form').hidden = true;
+    document.getElementById('done').classList.remove('show');
+  }
+
   async function post(url, body) {
     let res;
     try {
-      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    } catch { throw new Error('Could not reach the club laptop. Check you are on the same Wi-Fi.'); }
-    const data = await res.json();
+      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-club-code': clubCode }, body: JSON.stringify(body) });
+    } catch { throw new Error('Could not reach the leaderboard. Check your internet connection and try again.'); }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403) { lock(data.error); throw new Error(data.error); }
     if (!data.ok) throw new Error(data.error || 'That did not save. Try again.');
     return data;
   }
+
+  if (!clubCode) lock();
+  else post('/api/code/check', {}).catch(() => {});
 
   function setupCombo(key) {
     const root = document.getElementById(key);
@@ -293,8 +328,7 @@
     } catch (err) { newErr.textContent = err.message; }
   });
 
-  const socket = io();
-  socket.on('state', s => {
+  live(s => {
     players = s.players;
     for (const k of ['c1', 'c2']) {
       if (picked[k] && !byId(picked[k])) document.getElementById(k)._select(null);

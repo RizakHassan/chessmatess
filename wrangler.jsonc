@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chessmates",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "CLUB", "class_name": "Club" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Club"] }
+  ],
+  "vars": {
+    // Used for "This month" boundaries and default session names.
+    "CLUB_TIMEZONE": "Europe/London"
+  },
+  "observability": { "enabled": true }
+  // ADMIN_PIN is a secret: set it in the Cloudflare dashboard (Settings → Variables and Secrets)
+  // or with `npx wrangler secret put ADMIN_PIN`. For local dev, put it in .dev.vars.
+}
