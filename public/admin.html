@@ -48,9 +48,21 @@
   tr.removed td:not(.act) { opacity: .45; }
   .scroll { max-height: 640px; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
   .name-input { padding: 6px 10px; font-size: 15px; }
+  .merge-label { font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
+  .merge-select { width: 100%; min-width: 12rem; }
+  td.name-cell { min-width: 8rem; }
   .res { font-family: var(--mono); font-weight: 600; color: var(--text-2); }
   tr.session-row td { color: var(--slate); font-size: 13px; font-weight: 650; padding-top: 18px; border-bottom-color: var(--line-strong); }
   .deltas { font-family: var(--mono); font-size: 14px; }
+  .tag {
+    font: 600 12px var(--mono); letter-spacing: .04em; color: var(--slate); background: var(--sky-soft);
+    border: 0; border-radius: 6px; padding: 3px 7px; cursor: pointer;
+  }
+  button.tag:hover { background: var(--sky); }
+  .filter {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px; margin-bottom: 8px; border-radius: var(--r-row); background: var(--sky-soft); font-size: 14px;
+  }
   label.toggle { font-size: 14px; color: var(--text-2); font-weight: 500; display: flex; gap: 6px; align-items: center; cursor: pointer; }
   label.toggle input { accent-color: var(--slate); }
   .empty-row td { color: var(--muted); padding: 22px 8px; }
@@ -146,10 +158,11 @@
 
     <section class="panel">
       <h2>Recent games</h2>
-      <p class="lead">Newest first, grouped by session.</p>
+      <p class="lead">Newest first, grouped by session. Tap a phone tag to see everything that phone logged.</p>
+      <div class="filter" id="deviceFilter" hidden></div>
       <div class="scroll">
         <table>
-          <thead><tr><th>White</th><th>Result</th><th>Black</th><th class="num hide-sm">Elo change</th><th></th></tr></thead>
+          <thead><tr><th>White</th><th>Result</th><th>Black</th><th>Phone</th><th class="num hide-sm">Elo change</th><th></th></tr></thead>
           <tbody id="games"></tbody>
         </table>
       </div>
@@ -183,7 +196,7 @@
     if (res.status === 401) throw new PinRequired('Admin PIN required');
     const data = await res.json().catch(() => ({ ok: false, error: 'Unexpected response from the server' }));
     if (res.status === 503 || res.status === 429) throw new PinRequired(data.error);
-    if (data && data.ok === false) throw new Error(data.error);
+    if (data && data.ok === false) throw Object.assign(new Error(data.error), { data });
     return data;
   }
   const run = fn => async (...a) => {
@@ -232,7 +245,9 @@
       : '<span class="muted">No session yet. One starts automatically with the first game.</span>';
   }
 
+  let lastPlayers = [];
   function renderPlayers(players) {
+    lastPlayers = players;
     const showRemoved = document.getElementById('showRemoved').checked;
     const rows = players.filter(p => p.active || showRemoved).sort((a, b) => b.active - a.active || b.elo - a.elo);
     document.getElementById('players').innerHTML = rows.map(p => `
@@ -240,7 +255,7 @@
         <td class="name-cell">${esc(p.name)}</td>
         <td class="num">${Math.round(p.elo)}</td>
         <td class="act">${p.active
-          ? `<button class="btn ghost small" data-act="rename">Rename</button><button class="btn danger small" data-act="remove" data-confirm="Remove?">Remove</button>`
+          ? `<button class="btn ghost small" data-act="rename">Rename</button><button class="btn ghost small" data-act="merge" title="Same person entered twice? Move their games onto the other entry">Merge…</button><button class="btn danger small" data-act="remove" data-confirm="Remove?">Remove</button>`
           : `<button class="btn small" data-act="restore">Restore</button>`}</td>
       </tr>`).join('') || `<tr class="empty-row"><td colspan="3">No players yet. Add the first one above, or people can add themselves from the log page.</td></tr>`;
   }
@@ -251,20 +266,47 @@
       ? `<b>${esc(last.p1_name)} <span class="res">${resText(last.result)}</span> ${esc(last.p2_name)}</b><span class="muted">${new Date(last.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`
       : '<span class="muted">No games yet.</span>';
     document.getElementById('undo').disabled = !last;
+    lastGames = games;
+    const filterEl = document.getElementById('deviceFilter');
+    if (deviceFilter) {
+      const mine = games.filter(g => g.device_id === deviceFilter);
+      if (!mine.length) deviceFilter = null;
+      else {
+        filterEl.innerHTML = `<span>Showing <b>${mine.length}</b> game${mine.length === 1 ? '' : 's'} logged by phone <span class="tag">${phoneTag(deviceFilter)}</span></span>
+          <span class="actions"><button class="btn danger small" id="deleteDevice" data-confirm="Delete ${mine.length}?">Delete all from this phone</button>
+          <button class="btn ghost small" id="clearFilter">Show all</button></span>`;
+        games = mine;
+      }
+    }
+    filterEl.hidden = !deviceFilter;
     let prevSession = null;
     document.getElementById('games').innerHTML = games.map(g => {
-      const head = g.session_id !== prevSession ? `<tr class="session-row"><td colspan="5">${esc(g.session_label)}</td></tr>` : '';
+      const head = g.session_id !== prevSession ? `<tr class="session-row"><td colspan="6">${esc(g.session_label)}</td></tr>` : '';
       prevSession = g.session_id;
       return head + `
       <tr data-id="${g.id}">
         <td>${esc(g.p1_name)}</td>
         <td class="res">${resText(g.result)}</td>
         <td>${esc(g.p2_name)}</td>
+        <td>${g.device_id ? `<button class="tag" data-device="${esc(g.device_id)}" title="Show games from this phone">${phoneTag(g.device_id)}</button>` : '<span class="muted">admin</span>'}</td>
         <td class="num hide-sm deltas">${signed(g.p1_delta)} / ${signed(g.p2_delta)}</td>
         <td class="act"><button class="btn danger small" data-act="delete" data-confirm="Delete?" aria-label="Delete game">Delete</button></td>
       </tr>`;
-    }).join('') || `<tr class="empty-row"><td colspan="5">Games appear here as soon as someone logs one.</td></tr>`;
+    }).join('') || `<tr class="empty-row"><td colspan="6">Games appear here as soon as someone logs one.</td></tr>`;
   }
+
+  // Short, stable label for a phone's random id, e.g. "A4F2".
+  const phoneTag = id => esc(String(id).slice(0, 4).toUpperCase());
+  let deviceFilter = null, lastGames = [];
+
+  document.getElementById('deviceFilter').addEventListener('click', run(async e => {
+    if (e.target.closest('#clearFilter')) { deviceFilter = null; return renderGames(lastGames); }
+    const btn = e.target.closest('#deleteDevice'); if (!btn || !armed(btn)) return;
+    const { removed } = await api('DELETE', `/devices/${encodeURIComponent(deviceFilter)}/games`);
+    deviceFilter = null;
+    toast(`Deleted ${removed} game${removed === 1 ? '' : 's'}. Elo recalculated.`);
+    await load();
+  }));
 
   function renderCode(code) {
     document.getElementById('clubCode').textContent = code;
@@ -310,6 +352,18 @@
     await load();
   }));
 
+  // Same person entered twice: pick the entry to keep; this row's games move onto it.
+  function startMerge(tr) {
+    editing = Number(tr.dataset.id);
+    const others = lastPlayers.filter(p => p.id !== editing).sort((a, b) => a.name.localeCompare(b.name));
+    tr.querySelector('.name-cell').innerHTML = `<div class="merge-label">Merge <b>${esc(tr.dataset.name)}</b> into</div>
+      <select class="input name-input merge-select" aria-label="Keep this player">
+        <option value="">Choose who to keep…</option>
+        ${others.map(p => `<option value="${p.id}">${esc(p.name)}${p.active ? '' : ' (removed)'} · ${Math.round(p.elo)}</option>`).join('')}
+      </select>`;
+    tr.querySelector('.act').innerHTML = `<button class="btn primary small" data-act="do-merge" data-confirm="Merge?">Merge</button><button class="btn ghost small" data-act="cancel">Cancel</button>`;
+  }
+
   function startRename(tr) {
     editing = Number(tr.dataset.id);
     const cell = tr.querySelector('.name-cell');
@@ -328,6 +382,15 @@
     const tr = btn.closest('tr'); const id = tr.dataset.id; const name = tr.dataset.name;
     const act = btn.dataset.act;
     if (act === 'rename') return startRename(tr);
+    if (act === 'merge') return startMerge(tr);
+    if (act === 'do-merge') {
+      const keep = Number(tr.querySelector('.merge-select').value);
+      if (!keep) { toast('Pick who to merge into', true); return; }
+      if (!armed(btn)) return;
+      const { moved, kept, removed } = await api('POST', '/players/merge', { keep, drop: Number(id) });
+      editing = null;
+      toast(`Merged ${removed} into ${kept}: ${moved} game${moved === 1 ? '' : 's'} moved, Elo recalculated.`);
+    }
     if (act === 'cancel') { editing = null; return load(); }
     if (act === 'save') {
       const next = tr.querySelector('.name-input').value.trim();
@@ -343,6 +406,8 @@
   }));
 
   document.getElementById('games').addEventListener('click', run(async e => {
+    const tag = e.target.closest('button[data-device]');
+    if (tag) { deviceFilter = tag.dataset.device; renderGames(lastGames); return; }
     const btn = e.target.closest('button[data-act="delete"]'); if (!btn || !armed(btn)) return;
     await api('DELETE', `/games/${btn.closest('tr').dataset.id}`); toast('Game deleted. Elo recalculated.');
     await load();
@@ -367,10 +432,23 @@
     e.preventDefault();
     const input = document.getElementById('newPlayer');
     if (!input.value.trim()) { addErr.textContent = 'Enter a name first.'; return; }
-    try { await api('POST', '/players', { name: input.value }); }
-    catch (err) { if (err instanceof PinRequired) throw err; addErr.textContent = err.message; return; }
-    toast(`${input.value.trim()} added`); input.value = ''; await load();
+    await addPlayer(input.value, false);
   }));
+  async function addPlayer(name, force) {
+    const input = document.getElementById('newPlayer');
+    try { await api('POST', '/players', { name, force }); }
+    catch (err) {
+      if (err instanceof PinRequired) throw err;
+      const d = err.data;
+      if (d?.similar && !d.exact) {
+        addErr.innerHTML = `Similar: ${d.similar.map(p => `<b>${esc(p.name)}</b>`).join(', ')}. <button type="button" class="link-btn" id="addAnyway">Add anyway</button>`;
+        document.getElementById('addAnyway').addEventListener('click', run(() => addPlayer(name, true)));
+      } else addErr.textContent = err.message;
+      return;
+    }
+    addErr.textContent = '';
+    toast(`${name.trim()} added`); input.value = ''; await load();
+  }
   document.getElementById('showRemoved').addEventListener('change', run(load));
 
   // Any change from anywhere (phones logging games) refreshes the admin view.

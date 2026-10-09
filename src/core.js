@@ -54,12 +54,70 @@ function monthStartUtc(year, month, timeZone) {
 }
 
 const cleanName = name => String(name ?? '').trim().replace(/\s+/g, ' ');
+const cleanDevice = id => (/^[A-Za-z0-9-]{8,64}$/.test(String(id ?? '')) ? String(id) : null);
 
-export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
+export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000; // same pairing + result this soon is probably logged twice
+export const SELF_UNDO_MS = 75 * 1000;             // phone shows 60s; a little grace for slow networks
+
+// Thrown when a new name looks like someone already on the list; the phone can pick them or confirm.
+export class SimilarNameError extends Error {
+  constructor(matches, exact = false) {
+    super(exact ? `${matches[0].name} is already on the list.` : `That looks like ${matches.length === 1 ? 'someone' : 'people'} already on the list.`);
+    this.code = 'similar';
+    this.matches = matches;
+    this.exact = exact;
+  }
+}
+
+// Lowercase, accents and punctuation stripped: "Lucía O'Brien" -> "lucia obrien".
+const normName = name => String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]++;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+// Same first name ("Rizak" vs "Rizak Hassan"), or a likely typo of the whole name.
+function looksLikeSamePerson(a, b) {
+  const x = normName(a), y = normName(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const fx = x.split(' ')[0], fy = y.split(' ')[0];
+  if (fx.length >= 3 && fx === fy) return true;
+  const limit = Math.min(x.length, y.length) >= 8 ? 2 : Math.min(x.length, y.length) >= 4 ? 1 : 0;
+  return editDistance(x, y) <= limit;
+}
+
+// Thrown when a result looks like one that was just logged; the phone can confirm and resend.
+export class DuplicateError extends Error {
+  constructor(minutesAgo, samePhone) {
+    super(samePhone
+      ? `You already logged this result ${minutesAgo < 1 ? 'just now' : `${minutesAgo} min ago`}.`
+      : `Another phone logged this result ${minutesAgo < 1 ? 'just now' : `${minutesAgo} min ago`}.`);
+    this.code = 'duplicate';
+    this.minutesAgo = minutesAgo;
+    this.samePhone = samePhone;
+  }
+}
+
+export function createClub(sql, { timeZone = 'Europe/London', clock = () => new Date() } = {}) {
   for (const stmt of SCHEMA) sql.all(stmt);
+  // v2: which phone logged each game. Older databases get the column added in place.
+  try { sql.all('SELECT device_id FROM games LIMIT 0'); }
+  catch { sql.all('ALTER TABLE games ADD COLUMN device_id TEXT'); }
+  sql.all('CREATE INDEX IF NOT EXISTS games_device ON games(device_id)');
 
   const one = (q, ...p) => sql.all(q, ...p)[0] ?? null;
-  const now = () => new Date().toISOString();
+  const now = () => clock().toISOString();
 
   /* ---------- settings ---------- */
 
@@ -85,12 +143,22 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
     return sql.all(`SELECT id, name, elo, active, created_at FROM players ${where} ORDER BY name COLLATE NOCASE`);
   }
 
-  function addPlayer(name) {
+  function similarPlayers(name) {
+    return sql.all('SELECT id, name FROM players WHERE active = 1')
+      .filter(p => looksLikeSamePerson(p.name, name))
+      .slice(0, 4);
+  }
+
+  function addPlayer(name, { force = false } = {}) {
     name = cleanName(name);
     if (!name) throw new Error('Name is required');
     if (name.length > 40) throw new Error('Name is too long');
-    const existing = one('SELECT name FROM players WHERE name = ? COLLATE NOCASE AND active = 1', name);
-    if (existing) throw new Error(`"${existing.name}" is already on the list`);
+    const existing = one('SELECT id, name FROM players WHERE name = ? COLLATE NOCASE AND active = 1', name);
+    if (existing) throw new SimilarNameError([existing], true); // exact match: never add twice
+    if (!force) {
+      const similar = similarPlayers(name);
+      if (similar.length) throw new SimilarNameError(similar);
+    }
     return one('INSERT INTO players (name, elo, created_at) VALUES (?, ?, ?) RETURNING *', name, START_ELO, now());
   }
 
@@ -102,6 +170,26 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
       throw new Error('Another player already has that name');
     }
     if (!one('UPDATE players SET name = ? WHERE id = ? RETURNING id', name, id)) throw new Error('Player not found');
+  }
+
+  // Two entries for one person: move every game from `dropId` to `keepId`, remove `dropId`, replay Elo.
+  function mergePlayers(keepId, dropId) {
+    keepId = Number(keepId); dropId = Number(dropId);
+    if (!keepId || !dropId || keepId === dropId) throw new Error('Pick two different players');
+    return sql.transaction(() => {
+      const keep = one('SELECT * FROM players WHERE id = ?', keepId);
+      const drop = one('SELECT * FROM players WHERE id = ?', dropId);
+      if (!keep || !drop) throw new Error('Player not found');
+      if (one('SELECT 1 AS x FROM games WHERE (p1_id = ? AND p2_id = ?) OR (p1_id = ? AND p2_id = ?) LIMIT 1', keepId, dropId, dropId, keepId)) {
+        throw new Error(`${drop.name} and ${keep.name} have played each other, so they can't be the same person. Delete those games first if they're wrong.`);
+      }
+      const moved = sql.all('UPDATE games SET p1_id = ? WHERE p1_id = ? RETURNING id', keepId, dropId).length
+                  + sql.all('UPDATE games SET p2_id = ? WHERE p2_id = ? RETURNING id', keepId, dropId).length;
+      sql.all('DELETE FROM players WHERE id = ?', dropId);
+      if (drop.active && !keep.active) sql.all('UPDATE players SET active = 1 WHERE id = ?', keepId);
+      recalculate();
+      return { moved, kept: keep.name, removed: drop.name };
+    });
   }
 
   // Players with game history are hidden (soft-deleted) so everyone else's Elo
@@ -125,8 +213,9 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
 
   /* ---------- games ---------- */
 
-  function logGame(p1Id, p2Id, result) {
+  function logGame(p1Id, p2Id, result, { deviceId = null, allowDuplicate = false } = {}) {
     p1Id = Number(p1Id); p2Id = Number(p2Id); result = Number(result);
+    deviceId = cleanDevice(deviceId);
     if (!p1Id || !p2Id) throw new Error('Pick both players');
     if (p1Id === p2Id) throw new Error('A player cannot play themselves');
     if (![0, 0.5, 1].includes(result)) throw new Error('Invalid result');
@@ -135,11 +224,22 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
       const p1 = one('SELECT * FROM players WHERE id = ? AND active = 1', p1Id);
       const p2 = one('SELECT * FROM players WHERE id = ? AND active = 1', p2Id);
       if (!p1 || !p2) throw new Error('Player not found');
+      if (!allowDuplicate) {
+        // Same two players with the same outcome (either colour order) in the last few minutes.
+        const since = new Date(clock().getTime() - DUPLICATE_WINDOW_MS).toISOString();
+        const dup = one(`SELECT created_at, device_id FROM games
+                         WHERE created_at >= ? AND ((p1_id = ? AND p2_id = ? AND result = ?) OR (p1_id = ? AND p2_id = ? AND result = ?))
+                         ORDER BY created_at DESC LIMIT 1`, since, p1Id, p2Id, result, p2Id, p1Id, 1 - result);
+        if (dup) {
+          const minutesAgo = Math.floor((clock().getTime() - Date.parse(dup.created_at)) / 60000);
+          throw new DuplicateError(minutesAgo, !!deviceId && dup.device_id === deviceId);
+        }
+      }
       const session = ensureSession();
       const d1 = eloDelta(p1.elo, p2.elo, result);
       const d2 = eloDelta(p2.elo, p1.elo, 1 - result);
-      const game = one(`INSERT INTO games (p1_id, p2_id, result, p1_delta, p2_delta, session_id, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`, p1Id, p2Id, result, d1, d2, session.id, now());
+      const game = one(`INSERT INTO games (p1_id, p2_id, result, p1_delta, p2_delta, session_id, created_at, device_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, p1Id, p2Id, result, d1, d2, session.id, now(), deviceId);
       sql.all('UPDATE players SET elo = elo + ? WHERE id = ?', d1, p1Id);
       sql.all('UPDATE players SET elo = elo + ? WHERE id = ?', d2, p2Id);
       return {
@@ -171,6 +271,30 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
     sql.transaction(() => {
       if (!one('DELETE FROM games WHERE id = ? RETURNING id', id)) throw new Error('Game not found');
       recalculate();
+    });
+  }
+
+  // The phone that logged a game can take it back for a short while, without admin.
+  function undoOwnGame(id, deviceId) {
+    deviceId = cleanDevice(deviceId);
+    const g = one('SELECT id, device_id, created_at FROM games WHERE id = ?', Number(id));
+    if (!g) throw new Error('That game was already removed');
+    if (!deviceId || g.device_id !== deviceId) throw new Error('Only the phone that logged this game can undo it');
+    if (clock().getTime() - Date.parse(g.created_at) > SELF_UNDO_MS) {
+      throw new Error('Too late to undo from your phone. Ask the organiser to delete it.');
+    }
+    deleteGame(g.id);
+  }
+
+  // Admin clean-up: remove every game one phone logged, then replay Elo once.
+  function deleteGamesByDevice(deviceId) {
+    deviceId = cleanDevice(deviceId);
+    if (!deviceId) throw new Error('Unknown phone');
+    return sql.transaction(() => {
+      const removed = sql.all('DELETE FROM games WHERE device_id = ? RETURNING id', deviceId).length;
+      if (!removed) throw new Error('No games from that phone');
+      recalculate();
+      return removed;
     });
   }
 
@@ -258,7 +382,7 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
       exported_at: now(),
       players: sql.all('SELECT * FROM players ORDER BY id'),
       sessions: sql.all('SELECT * FROM sessions ORDER BY id'),
-      games: sql.all('SELECT id, p1_id, p2_id, result, session_id, created_at FROM games ORDER BY id'),
+      games: sql.all('SELECT id, p1_id, p2_id, result, session_id, created_at, device_id FROM games ORDER BY id'),
     };
   }
 
@@ -280,8 +404,8 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
         sql.all('INSERT INTO sessions (id, label, created_at) VALUES (?, ?, ?)', Number(s.id), String(s.label), String(s.created_at || now()));
       }
       for (const g of games) {
-        sql.all('INSERT INTO games (id, p1_id, p2_id, result, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          Number(g.id), Number(g.p1_id), Number(g.p2_id), Number(g.result), Number(g.session_id), String(g.created_at));
+        sql.all('INSERT INTO games (id, p1_id, p2_id, result, session_id, created_at, device_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          Number(g.id), Number(g.p1_id), Number(g.p2_id), Number(g.result), Number(g.session_id), String(g.created_at), cleanDevice(g.device_id));
       }
       recalculate();
     });
@@ -291,8 +415,8 @@ export function createClub(sql, { timeZone = 'Europe/London' } = {}) {
   return {
     getSetting, setSetting,
     currentSession, startSession,
-    listPlayers, addPlayer, renamePlayer, removePlayer, restorePlayer,
-    logGame, deleteGame, undoLastGame, recalculate, recentGames,
+    listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
+    logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
     tonightStandings, monthStandings, snapshot,
     exportData, importData,
   };

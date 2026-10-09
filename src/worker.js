@@ -151,13 +151,19 @@ export class Club extends DurableObject {
       }
       if (path === '/api/players' && method === 'POST') {
         this.requireClubCode(request);
-        const { name } = await body();
-        return mutate(() => ({ player: club.addPlayer(name) }));
+        const { name, force } = await body();
+        return mutate(() => ({ player: club.addPlayer(name, { force: force === true }) }));
       }
       if (path === '/api/games' && method === 'POST') {
         this.requireClubCode(request);
-        const { p1, p2, result } = await body();
-        return mutate(() => ({ game: club.logGame(p1, p2, result) }));
+        const { p1, p2, result, allowDuplicate } = await body();
+        const deviceId = request.headers.get('x-device-id');
+        return mutate(() => ({ game: club.logGame(p1, p2, result, { deviceId, allowDuplicate: allowDuplicate === true }) }));
+      }
+      const ownUndo = path.match(/^\/api\/games\/(\d+)\/undo$/);
+      if (ownUndo && method === 'POST') {
+        this.requireClubCode(request);
+        return mutate(() => club.undoOwnGame(Number(ownUndo[1]), request.headers.get('x-device-id')));
       }
 
       /* admin */
@@ -169,7 +175,8 @@ export class Club extends DurableObject {
 
         if (sub === '/check' && method === 'POST') return json({ ok: true });
         if (sub === '/players' && method === 'GET') return json(club.listPlayers({ includeRemoved: true }));
-        if (sub === '/players' && method === 'POST') { const { name } = await body(); return mutate(() => ({ player: club.addPlayer(name) })); }
+        if (sub === '/players' && method === 'POST') { const { name, force } = await body(); return mutate(() => ({ player: club.addPlayer(name, { force: force === true }) })); }
+        if (sub === '/players/merge' && method === 'POST') { const { keep, drop } = await body(); return mutate(() => club.mergePlayers(keep, drop)); }
         if (sub === '/games' && method === 'GET') return json(club.recentGames(Math.min(Number(url.searchParams.get('limit')) || 100, 1000)));
         if (sub === '/session' && method === 'GET') return json(club.currentSession());
         if (sub === '/sessions' && method === 'POST') { const { label } = await body(); return mutate(() => ({ session: club.startSession(label) })); }
@@ -179,6 +186,9 @@ export class Club extends DurableObject {
         if (idMatch?.[1] === 'players' && !idMatch[3] && method === 'DELETE') return mutate(() => club.removePlayer(id));
         if (idMatch?.[1] === 'players' && idMatch[3] && method === 'POST') return mutate(() => club.restorePlayer(id));
         if (idMatch?.[1] === 'games' && !idMatch[3] && method === 'DELETE') return mutate(() => club.deleteGame(id));
+
+        const deviceMatch = sub.match(/^\/devices\/([A-Za-z0-9-]{8,64})\/games$/);
+        if (deviceMatch && method === 'DELETE') return mutate(() => ({ removed: club.deleteGamesByDevice(deviceMatch[1]) }));
 
         if (sub === '/club-code' && method === 'GET') return json({ code: club.getSetting('club_code') });
         if (sub === '/club-code' && method === 'POST') {
@@ -200,6 +210,12 @@ export class Club extends DurableObject {
       return json({ ok: false, error: 'Not found' }, 404);
     } catch (err) {
       if (err instanceof HttpError) return json({ ok: false, error: err.message }, err.status);
+      if (err.code === 'similar') {
+        return json({ ok: false, similar: err.matches.map(p => ({ id: p.id, name: p.name })), exact: err.exact, error: err.message }, 409);
+      }
+      if (err.code === 'duplicate') {
+        return json({ ok: false, duplicate: true, error: err.message, minutes_ago: err.minutesAgo, same_phone: err.samePhone }, 409);
+      }
       return json({ ok: false, error: err.message || 'Something went wrong' }, 400);
     }
   }

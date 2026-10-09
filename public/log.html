@@ -49,6 +49,7 @@
   }
   .list button:hover, .list button:focus-visible { background: var(--sky-soft); outline: none; }
   .list .num { color: var(--muted); font-size: 15px; }
+  .list .you { color: var(--muted); font-weight: 500; }
   .list .none { padding: 14px 12px; color: var(--muted); font-size: 15px; }
 
   .vs {
@@ -73,6 +74,12 @@
   .newbie form { display: grid; gap: 8px; margin-top: 12px; }
   .newbie .row { display: flex; gap: 8px; }
   .newbie .row .input { flex: 1; min-width: 0; }
+  .similar { padding: 14px; border-radius: var(--r-row); background: var(--surface); box-shadow: 0 0 0 1.5px var(--orange) inset; }
+  .similar p { margin: 0 0 10px; color: var(--text); font-weight: 600; }
+  .similar .pick { display: flex; flex-direction: column; gap: 6px; }
+  .similar .pick .btn { justify-content: space-between; }
+  .similar .pick .btn small { color: var(--muted); font-weight: 500; }
+  .similar .link-btn { margin-top: 10px; }
 
   .locked {
     padding: 24px 20px; background: var(--surface); border-radius: var(--r-container);
@@ -93,6 +100,8 @@
   .done .line { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 550; padding: 12px 2px; border-top: 1.5px solid var(--line); }
   .done .line .elo { color: var(--muted); font-family: var(--mono); font-size: 15px; margin-right: 10px; }
   .done .btn { margin-top: 18px; width: 100%; padding: 15px; font-size: 17px; }
+  .done .btn.undo { margin-top: 8px; padding: 12px; font-size: 15px; color: var(--down); }
+  .hint .link-btn { margin-left: 4px; color: var(--down); text-decoration-color: currentColor; }
 </style>
 </head>
 <body>
@@ -140,13 +149,15 @@
     </section>
 
     <section class="newbie">
-      <p>Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
+      <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <button class="link-btn" id="notMe" type="button">Not you?</button></p>
+      <p id="newLine">Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
       <form id="newForm" hidden>
         <div class="row">
           <input class="input" id="newName" placeholder="First and last name" maxlength="40" autocapitalize="words" aria-label="Your name" required>
           <button class="btn primary" type="submit">Add</button>
         </div>
         <p class="error-text" id="newErr" aria-live="polite"></p>
+        <div class="similar" id="similar" hidden></div>
       </form>
     </section>
   </div>
@@ -156,6 +167,7 @@
     <div class="big" id="doneTitle"></div>
     <div id="doneLines"></div>
     <button class="btn primary" id="again">Log another game</button>
+    <button class="btn ghost undo" id="undoBtn" type="button" hidden>Wrong result? Undo</button>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -194,14 +206,26 @@
     document.getElementById('done').classList.remove('show');
   }
 
+  // A random id for this phone, so its own games can be undone and admin can see who logged what.
+  const deviceId = (() => {
+    try {
+      let id = localStorage.getItem('deviceId');
+      if (!id) {
+        id = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('deviceId', id);
+      }
+      return id;
+    } catch { return ''; }
+  })();
+
   async function post(url, body) {
     let res;
     try {
-      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-club-code': clubCode }, body: JSON.stringify(body) });
+      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-club-code': clubCode, 'x-device-id': deviceId }, body: JSON.stringify(body) });
     } catch { throw new Error('Could not reach the leaderboard. Check your internet connection and try again.'); }
     const data = await res.json().catch(() => ({}));
     if (res.status === 403) { lock(data.error); throw new Error(data.error); }
-    if (!data.ok) throw new Error(data.error || 'That did not save. Try again.');
+    if (!data.ok) throw Object.assign(new Error(data.error || 'That did not save. Try again.'), { data });
     return data;
   }
 
@@ -222,10 +246,10 @@
         .filter(p => !q || p.name.toLowerCase().includes(q))
         .sort((a, b) => {
           const as = a.name.toLowerCase().startsWith(q), bs = b.name.toLowerCase().startsWith(q);
-          return (bs - as) || a.name.localeCompare(b.name);
+          return (b.id === me) - (a.id === me) || (bs - as) || a.name.localeCompare(b.name);
         });
       list.innerHTML = items.length
-        ? items.map(p => `<button type="button" role="option" data-id="${p.id}"><span>${esc(p.name)}</span><span class="num">${p.elo}</span></button>`).join('')
+        ? items.map(p => `<button type="button" role="option" data-id="${p.id}"><span>${esc(p.name)}${p.id === me ? ' <span class="you">(you)</span>' : ''}</span><span class="num">${p.elo}</span></button>`).join('')
         : `<div class="none">${players.length ? 'No one by that name. Use “Add your name” below.' : 'No players yet. Add your name below.'}</div>`;
     }
 
@@ -277,20 +301,28 @@
   }
 
   let busy = false;
-  document.querySelectorAll('.results .btn').forEach(btn => btn.addEventListener('click', async () => {
+  async function submit(result, allowDuplicate = false) {
     if (busy) return;
     busy = true;
     document.querySelectorAll('.results .btn').forEach(b => b.disabled = true);
     hint.classList.remove('err'); hint.textContent = 'Saving…';
     try {
-      const { game } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result: Number(btn.dataset.result) });
+      const { game } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result, allowDuplicate });
       showDone(game);
     } catch (err) {
       refreshButtons();
-      hint.classList.add('err'); hint.textContent = err.message;
+      hint.classList.add('err');
+      if (err.data?.duplicate) {
+        // Probably both players logged the same game. Let them confirm if it really was a rematch.
+        hint.innerHTML = `${esc(err.message)} Was this a new game? <button type="button" class="link-btn" id="logAnyway">Yes, log it again</button>`;
+        document.getElementById('logAnyway').addEventListener('click', () => submit(result, true));
+      } else {
+        hint.textContent = err.message;
+      }
     }
     busy = false;
-  }));
+  }
+  document.querySelectorAll('.results .btn').forEach(btn => btn.addEventListener('click', () => submit(Number(btn.dataset.result))));
 
   function showDone(g) {
     const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
@@ -301,9 +333,44 @@
     document.getElementById('doneLines').innerHTML = line(g.p1, g.p1_elo, d1) + line(g.p2, g.p2_elo, d2);
     document.getElementById('form').hidden = true;
     document.getElementById('done').classList.add('show');
+    startUndo(g.id);
   }
 
+  // Undo window: the phone that logged a game can take it back for 60 seconds.
+  const undoBtn = document.getElementById('undoBtn');
+  let undoGameId = null, undoTimer = null;
+  function startUndo(id) {
+    undoGameId = id;
+    const until = Date.now() + 60000;
+    const tick = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left <= 0) return stopUndo();
+      undoBtn.textContent = `Wrong result? Undo (${left}s)`;
+    };
+    clearInterval(undoTimer);
+    undoBtn.hidden = false; undoBtn.disabled = false;
+    tick(); undoTimer = setInterval(tick, 1000);
+  }
+  function stopUndo() { clearInterval(undoTimer); undoBtn.hidden = true; undoGameId = null; }
+  undoBtn.addEventListener('click', async () => {
+    if (!undoGameId) return;
+    undoBtn.disabled = true;
+    try {
+      await post(`/api/games/${undoGameId}/undo`, {});
+      stopUndo();
+      // Back to the form with the same players picked, ready to log the right result.
+      document.getElementById('done').classList.remove('show');
+      document.getElementById('form').hidden = false;
+      refreshButtons();
+      toast('Game removed. Pick the right result.');
+    } catch (err) {
+      stopUndo();
+      toast(err.message);
+    }
+  });
+
   document.getElementById('again').addEventListener('click', () => {
+    stopUndo();
     document.getElementById('c1')._select(null);
     document.getElementById('c2')._select(null);
     document.getElementById('done').classList.remove('show');
@@ -311,25 +378,75 @@
     window.scrollTo(0, 0);
   });
 
+  /* ---------- who is this phone? ---------- */
+  // Remembering the player stops people re-adding themselves under a new name next week.
+  const meStore = {
+    get: () => { try { return Number(localStorage.getItem('myPlayerId')) || null; } catch { return null; } },
+    set: id => { try { id ? localStorage.setItem('myPlayerId', String(id)) : localStorage.removeItem('myPlayerId'); } catch {} },
+  };
+  let me = meStore.get();
+  let playersLoaded = false;
   const newBtn = document.getElementById('newBtn'), newForm = document.getElementById('newForm');
   const newName = document.getElementById('newName'), newErr = document.getElementById('newErr');
-  newBtn.addEventListener('click', () => { newForm.hidden = false; newBtn.closest('p').hidden = true; newName.focus(); });
-  newName.addEventListener('input', () => { newErr.textContent = ''; });
-  newForm.addEventListener('submit', async e => {
-    e.preventDefault();
+  const similarBox = document.getElementById('similar');
+
+  function renderMe() {
+    const p = me && byId(me);
+    if (me && !p && playersLoaded) { me = null; meStore.set(null); } // removed or merged away
+    document.getElementById('meLine').hidden = !p;
+    document.getElementById('newLine').hidden = !!p || !newForm.hidden;
+    if (p) document.getElementById('meName').textContent = p.name;
+  }
+  function setMe(id) { me = id; meStore.set(id); renderMe(); }
+  function closeNewForm() {
+    newName.value = ''; newErr.textContent = ''; similarBox.hidden = true; newForm.hidden = true; renderMe();
+  }
+  function useAsMe(id, welcome) {
+    setMe(id);
+    const slot = !picked.c1 ? 'c1' : !picked.c2 ? 'c2' : null;
+    if (slot && picked.c1 !== id && picked.c2 !== id) document.getElementById(slot)._select(id);
+    closeNewForm();
+    if (welcome) toast(welcome);
+  }
+
+  document.getElementById('notMe').addEventListener('click', () => {
+    setMe(null);
+    newForm.hidden = false; document.getElementById('newLine').hidden = true; newName.focus();
+  });
+  newBtn.addEventListener('click', () => { newForm.hidden = false; document.getElementById('newLine').hidden = true; newName.focus(); });
+  newName.addEventListener('input', () => { newErr.textContent = ''; similarBox.hidden = true; });
+
+  async function addName(force) {
     if (!newName.value.trim()) { newErr.textContent = 'Enter your name first.'; return; }
     try {
-      const { player } = await post('/api/players', { name: newName.value });
+      const { player } = await post('/api/players', { name: newName.value, force });
       players.push({ id: player.id, name: player.name, elo: Math.round(player.elo) });
-      const slot = !picked.c1 ? 'c1' : !picked.c2 ? 'c2' : null;
-      if (slot) document.getElementById(slot)._select(player.id);
-      toast(`Welcome, ${player.name}. You start at 1000.`);
-      newName.value = ''; newForm.hidden = true; newBtn.closest('p').hidden = false;
-    } catch (err) { newErr.textContent = err.message; }
+      useAsMe(player.id, `Welcome, ${player.name}. You start at 1000.`);
+    } catch (err) {
+      const similar = err.data?.similar;
+      if (!similar) { newErr.textContent = err.message; return; }
+      // Close matches: let them pick themselves instead of creating a second entry.
+      const typed = newName.value.trim();
+      similarBox.innerHTML = `<p>${err.data.exact ? 'That name is already on the list. Is it you?' : 'Is one of these you?'}</p>
+        <div class="pick">${similar.map(m => `<button type="button" class="btn" data-me="${m.id}">${esc(m.name)}<small>That's me</small></button>`).join('')}</div>
+        ${err.data.exact ? '' : `<button type="button" class="link-btn" id="forceNew">No, I'm new: add “${esc(typed)}”</button>`}`;
+      similarBox.hidden = false;
+    }
+  }
+  newForm.addEventListener('submit', e => { e.preventDefault(); addName(false); });
+  similarBox.addEventListener('click', e => {
+    const mine = e.target.closest('[data-me]');
+    if (mine) {
+      const p = byId(Number(mine.dataset.me));
+      return useAsMe(Number(mine.dataset.me), p ? `Welcome back, ${p.name}.` : '');
+    }
+    if (e.target.closest('#forceNew')) addName(true);
   });
 
   live(s => {
     players = s.players;
+    playersLoaded = true;
+    renderMe();
     for (const k of ['c1', 'c2']) {
       if (picked[k] && !byId(picked[k])) document.getElementById(k)._select(null);
       document.getElementById(k)._draw();

@@ -58,6 +58,14 @@ Phones just need mobile data or any Wi-Fi. Nothing has to be on the same network
 - **Club code.** The QR link carries an 8-character code (`/log?c=…`), and each phone remembers it after one scan. People who only know the web address can see the leaderboard but can't log games or add names. If the code leaks, click **Change code** in admin and reprint the QR. Phones holding the old code are asked to scan again.
 - **Guessing protection.** Repeated wrong PINs or codes from one IP address are locked out for 15 minutes. PIN and club-code failures are counted separately. Everyone at the venue shares one IP address, so phones can never lock the admin out.
 
+## Fair play
+
+- **Double-logged games.** If the same two players and the same result come in within 10 minutes, from either side of the board, the second phone sees "Another phone logged this result 2 min ago". Players can tap **Yes, log it again** for a genuine quick rematch.
+- **Undo on the phone.** For 60 seconds after logging, that phone sees **Wrong result? Undo**. It removes the game and goes back to the form with the same players picked. Only the phone that logged the game can undo it.
+- **Phone tags.** Each game records a random ID for the phone that logged it. In **Admin → Recent games**, tap a phone tag to see everything that phone logged, then **Delete all from this phone** if it was pranking.
+- **One person, one player.** After someone adds or picks their name, their phone remembers it ("You're Rizak Hassan on this phone"). Adding a name that looks like an existing player shows "Is one of these you?". That covers the same first name ("Rizak" vs "Rizak Hassan"), small typos and accents. Exact repeats are never allowed.
+- **Merge.** If a duplicate still slips in, open **Admin → Players → Merge…** on the extra entry and choose who to keep. Their games move across, the extra name is removed, and Elo is replayed. Two players who have played each other can't be merged.
+
 ## Backups
 
 Cloudflare keeps 30 days of point-in-time history for the club database automatically. For a copy you control, click **Download export** in **Admin → Backups** now and then. **Restore from export…** replaces everything with a downloaded export and replays Elo.
