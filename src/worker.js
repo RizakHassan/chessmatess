@@ -193,6 +193,13 @@ export class Club extends DurableObject {
       /* public */
       if (path === '/api/state' && method === 'GET') return json(club.snapshot());
       if (path === '/api/hours' && method === 'GET') return json(club.loggingStatus());
+      // History is public, like the leaderboard itself.
+      if (path === '/api/sessions' && method === 'GET') return json(club.listSessions());
+      const sessionMatch = path.match(/^\/api\/sessions\/(\d+)$/);
+      if (sessionMatch && method === 'GET') return json(club.sessionStandings(Number(sessionMatch[1])));
+      if (path === '/api/months' && method === 'GET') return json(club.listMonths());
+      const monthMatch = path.match(/^\/api\/months\/(\d{4}-\d{2})$/);
+      if (monthMatch && method === 'GET') return json(club.monthStandingsFor(monthMatch[1]));
       if (path === '/api/code/check' && method === 'POST') {
         this.requireClubCode(request);
         return json({ ok: true });

@@ -489,16 +489,84 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     return { session, rows, gameCount: games.length };
   }
 
-  function monthStandings(ref = new Date()) {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric' })
-      .formatToParts(ref).map(x => [x.type, x.value]));
-    const year = Number(parts.year), month = Number(parts.month) - 1;
+  // "2026-10" for the month `date` falls in, in club time.
+  function monthKey(date) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit' })
+      .formatToParts(date).map(x => [x.type, x.value]));
+    return `${p.year}-${p.month}`;
+  }
+
+  function monthStandings(ref = clock()) {
+    const [year, month] = monthKey(ref).split('-').map(Number).map((n, i) => (i ? n - 1 : n));
     const start = monthStartUtc(year, month, timeZone);
     const end = monthStartUtc(month === 11 ? year + 1 : year, (month + 1) % 12, timeZone);
     const games = sql.all('SELECT * FROM games WHERE created_at >= ? AND created_at < ?', start.toISOString(), end.toISOString());
     const rows = withPlayers(tally(games)).sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
     const label = new Date(Date.UTC(year, month, 15)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });
-    return { label, rows, gameCount: games.length };
+    return { key: `${year}-${String(month + 1).padStart(2, '0')}`, label, rows, gameCount: games.length };
+  }
+
+  /* ---------- history: past sessions and months ---------- */
+
+  // Everyone's rating just after `game` (inclusive), rebuilt from the stored Elo changes.
+  function ratingsAfter(game) {
+    return new Map(sql.all(`
+      SELECT p.id, ? + COALESCE(SUM(CASE WHEN g.p1_id = p.id THEN g.p1_delta ELSE g.p2_delta END), 0) AS elo
+      FROM players p
+      LEFT JOIN games g ON (g.p1_id = p.id OR g.p2_id = p.id)
+        AND (g.created_at < ? OR (g.created_at = ? AND g.id <= ?))
+      GROUP BY p.id`, START_ELO, game.created_at, game.created_at, game.id).map(r => [r.id, r.elo]));
+  }
+
+  // Rows for a past period: ratings as they were at its last game; removed players included.
+  function historicRows(games) {
+    if (!games.length) return [];
+    const ratings = ratingsAfter(games[games.length - 1]);
+    const names = new Map(sql.all('SELECT id, name FROM players').map(p => [p.id, p.name]));
+    return [...tally(games).values()].map(r => ({
+      ...r, name: names.get(r.id) ?? '?', elo: Math.round(ratings.get(r.id) ?? START_ELO), delta: Math.round(r.delta),
+    }));
+  }
+
+  function listSessions() {
+    const current = currentSession();
+    return sql.all(`SELECT s.id, s.label, s.created_at, COUNT(g.id) AS games
+                    FROM sessions s LEFT JOIN games g ON g.session_id = s.id
+                    GROUP BY s.id ORDER BY s.id DESC`)
+      .filter(s => s.games > 0 || (current && s.id === current.id))
+      .map(s => ({ ...s, current: !!current && s.id === current.id }));
+  }
+
+  function sessionStandings(id) {
+    const session = one('SELECT * FROM sessions WHERE id = ?', Number(id));
+    if (!session) throw new Error('Session not found');
+    const current = currentSession();
+    if (current && current.id === session.id) return { ...tonightStandings(), current: true };
+    const games = sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', session.id);
+    const rows = historicRows(games).sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
+    return { session, rows, gameCount: games.length, current: false };
+  }
+
+  function listMonths() {
+    const months = new Map([[monthKey(clock()), 0]]);
+    for (const g of sql.all('SELECT created_at FROM games')) {
+      const k = monthKey(new Date(g.created_at));
+      months.set(k, (months.get(k) || 0) + 1);
+    }
+    const label = k => { const [y, m] = k.split('-').map(Number); return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' }); };
+    return [...months].sort((a, b) => b[0].localeCompare(a[0])).map(([key, games]) => ({ key, label: label(key), games, current: key === monthKey(clock()) }));
+  }
+
+  function monthStandingsFor(key) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key))) throw new Error('Month must look like 2026-10');
+    if (key === monthKey(clock())) return { ...monthStandings(), current: true };
+    const [year, month] = key.split('-').map(Number);
+    const start = monthStartUtc(year, month - 1, timeZone);
+    const end = monthStartUtc(month === 12 ? year + 1 : year, month % 12, timeZone);
+    const games = sql.all('SELECT * FROM games WHERE created_at >= ? AND created_at < ? ORDER BY created_at, id', start.toISOString(), end.toISOString());
+    const rows = historicRows(games).sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
+    const label = new Date(Date.UTC(year, month - 1, 15)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+    return { key, label, rows, gameCount: games.length, current: false };
   }
 
   function snapshot() {
@@ -646,7 +714,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
-    tonightStandings, monthStandings, snapshot,
+    tonightStandings, monthStandings, snapshot, listSessions, sessionStandings, listMonths, monthStandingsFor,
     exportData, importData, spreadsheetSheets,
   };
 }

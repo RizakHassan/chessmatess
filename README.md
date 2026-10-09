@@ -52,6 +52,9 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 
 ### Display tips
 
+- **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, or the ← / → keys. Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
+- **Share a specific week or month:** `/display?session=12` or `/display?month=2026-09`. Add `&clean` for an Instagram-ready card. The arrows are hidden in clean mode.
+
 - `1` / `2` switches between the Tonight and This month tabs. `C` toggles clean mode, which hides the header for screenshots.
 - `/display?tab=month&clean` opens straight to a clean monthly card, ready for Instagram.
 - `/display?rotate=30` switches tabs automatically every 30 seconds.

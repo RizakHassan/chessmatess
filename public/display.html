@@ -162,7 +162,22 @@
     body.has-qr.tab-tonight:not(.clean) .wrap { max-width: none; margin: 0 300px 0 max(32px, calc(50vw - 900px)); }
   }
 
-  body.clean header, body.clean .meta, body.clean .conn { display: none; }
+  /* history: step through past club nights and months */
+  .history { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin: -8px 0 16px; }
+  .month .history { max-width: 940px; margin: -8px auto 16px; }
+  .history .hbtn {
+    justify-self: start; border: 0; background: transparent; color: var(--slate); font: inherit; font-size: 15px; font-weight: 650;
+    padding: 8px 12px; border-radius: 999px; cursor: pointer; transition: background-color .2s;
+  }
+  .history .hbtn[data-dir="newer"] { justify-self: end; }
+  .history .hbtn:hover:not(:disabled) { background: var(--sky-soft); }
+  .history .hbtn:disabled { opacity: .3; cursor: default; }
+  .history .hlabel { display: flex; align-items: center; gap: 10px; font-size: 16px; white-space: nowrap; }
+  .history .htag { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; background: var(--sky-soft); color: var(--slate); }
+  .history .htag.past { background: var(--orange); color: var(--ink); }
+  @media (max-width: 760px) { .history .hbtn span { display: none; } .history .hlabel { font-size: 14px; } }
+
+  body.clean header, body.clean .meta, body.clean .conn, body.clean .history { display: none; }
   body.clean .wrap { padding-top: 48px; }
 
   @media (max-width: 760px) {
@@ -201,12 +216,22 @@
   </header>
 
   <section class="view tonight active" id="view-tonight" aria-label="Tonight">
-    <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r">Tonight</div></div>
+    <nav class="history" id="nav-tonight" aria-label="Browse club nights">
+      <button class="hbtn" data-dir="older" aria-label="Previous club night">‹ <span>Previous week</span></button>
+      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span></div>
+      <button class="hbtn" data-dir="newer" aria-label="Next club night"><span>Next</span> ›</button>
+    </nav>
+    <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r" id="colNight">Tonight</div></div>
     <div class="board" id="board-tonight"></div>
-    <div class="meta"><span id="tonightMeta"></span><span>Most wins tonight, Elo breaks ties</span></div>
+    <div class="meta"><span id="tonightMeta"></span><span id="rankRule">Most wins tonight, Elo breaks ties</span></div>
   </section>
 
   <section class="view month" id="view-month" aria-label="This month">
+    <nav class="history" id="nav-month" aria-label="Browse months">
+      <button class="hbtn" data-dir="older" aria-label="Previous month">‹ <span>Previous month</span></button>
+      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span></div>
+      <button class="hbtn" data-dir="newer" aria-label="Next month"><span>Next</span> ›</button>
+    </nav>
     <article class="card">
       <div class="card-head">
         <h2 class="wordmark" id="monthTitle">This month</h2>
@@ -286,7 +311,7 @@
   };
 
   // FLIP: measure First positions, apply Last layout, Invert with transforms, Play transition.
-  function renderBoard(el, rows, kind, emptyHtml) {
+  function renderBoard(el, rows, kind, emptyHtml, { quiet = false } = {}) {
     el.querySelectorAll('.skeleton').forEach(n => n.remove());
     if (!rows.length) { el.innerHTML = `<div class="empty">${emptyHtml}</div>`; return; }
     el.querySelector('.empty')?.remove();
@@ -311,7 +336,7 @@
       let flash = null;
       if (isNew && !firstRender) flash = 'flash-new';
       if (before !== undefined && before !== r.elo) flash = r.elo > before ? 'flash-up' : 'flash-down';
-      if (flash && el.offsetParent !== null) { // only flash the visible board
+      if (flash && !quiet && el.offsetParent !== null) { // only flash the visible board, never for history
         node.classList.remove('flash-up', 'flash-down', 'flash-new');
         void node.offsetWidth;
         node.classList.add(flash);
@@ -336,18 +361,15 @@
   }
 
   function render(state) {
-    const t = state.tonight, m = state.month;
+    liveState = state;
+    const t = state.tonight;
     document.getElementById('sessionLabel').textContent = t.session ? t.session.label : 'No session started yet';
-    document.getElementById('tonightMeta').textContent = t.gameCount ? `${t.gameCount} game${t.gameCount === 1 ? '' : 's'} played` : '';
-    const [monthName, year] = m.label.split(' ');
-    document.getElementById('monthTitle').innerHTML = `${esc(monthName)} <span>${esc(year || '')}</span>`;
-    document.getElementById('monthPlayers').textContent = m.rows.length;
-    document.getElementById('monthGames').textContent = m.gameCount;
-
-    renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
-      `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`);
-    renderBoard(document.getElementById('board-month'), m.rows, 'month',
-      `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`);
+    // A new result always brings the screen back to the live boards.
+    const g0 = state.latest;
+    if (g0 && lastGameId !== null && g0.id > lastGameId) { view.tonight = null; view.month = null; }
+    if (view.tonight === null) showTonight(t);
+    if (view.month === null) showMonth(state.month);
+    loadHistory();
 
     for (const p of state.players) prevElo.set(p.id, p.elo);
 
@@ -388,6 +410,88 @@
       : lg.open ? `Logging open until ${lg.closes}` : `Logging opens ${lg.next || 'next club night'}`;
   }
   setInterval(() => fetch('/api/hours').then(r => r.json()).then(showHours).catch(() => {}), 60000);
+
+  /* ---------- history ---------- */
+  let liveState = null;
+  const view = { tonight: null, month: null };          // null = live, else a session id / month key
+  const lists = { tonight: [], month: [] };             // newest first, from the server
+  const wanted = { tonight: Number(params.get('session')) || null, month: params.get('month') || null };
+
+  function showTonight(t, past = null, quiet = !!past) {
+    const n = t.gameCount;
+    document.getElementById('tonightMeta').textContent = n ? `${n} game${n === 1 ? '' : 's'} played${past ? ' that night' : ''}` : '';
+    document.getElementById('colNight').textContent = past ? 'That night' : 'Tonight';
+    document.getElementById('rankRule').textContent = `Most wins ${past ? 'that night' : 'tonight'}, Elo breaks ties`;
+    renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
+      `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`,
+      { quiet });
+  }
+  function showMonth(m, past = false, quiet = past) {
+    const [monthName, year] = m.label.split(' ');
+    document.getElementById('monthTitle').innerHTML = `${esc(monthName)} <span>${esc(year || '')}</span>`;
+    document.getElementById('monthPlayers').textContent = m.rows.length;
+    document.getElementById('monthGames').textContent = m.gameCount;
+    renderBoard(document.getElementById('board-month'), m.rows, 'month',
+      `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`, { quiet });
+  }
+
+  function renderNav(kind) {
+    const nav = document.getElementById('nav-' + kind), list = lists[kind];
+    const idx = view[kind] === null ? list.findIndex(x => x.current) : list.findIndex(x => (x.id ?? x.key) === view[kind]);
+    const item = list[idx];
+    nav.querySelector('[data-label]').textContent = item ? item.label : '';
+    const tag = nav.querySelector('[data-tag]');
+    const live = view[kind] === null;
+    tag.textContent = live ? (kind === 'tonight' ? 'Tonight' : 'This month') : (kind === 'tonight' ? 'Past week' : 'Past month');
+    tag.classList.toggle('past', !live);
+    nav.querySelector('[data-dir="older"]').disabled = idx < 0 || idx >= list.length - 1;
+    nav.querySelector('[data-dir="newer"]').disabled = live;
+    nav.hidden = list.length < 2 && live; // nothing to browse yet
+  }
+
+  let historyBusy = false;
+  async function loadHistory() {
+    if (historyBusy) return;
+    historyBusy = true;
+    try {
+      const [sessions, months] = await Promise.all([fetch('/api/sessions').then(r => r.json()), fetch('/api/months').then(r => r.json())]);
+      lists.tonight = sessions; lists.month = months;
+      // Deep links: /display?session=12 or ?month=2026-09
+      if (wanted.tonight) { const id = wanted.tonight; wanted.tonight = null; if (sessions.some(s => s.id === id && !s.current)) await goTo('tonight', id); }
+      if (wanted.month) { const k = wanted.month; wanted.month = null; if (months.some(m => m.key === k && !m.current)) { setTab('month'); await goTo('month', k); } }
+      renderNav('tonight'); renderNav('month');
+    } catch { /* offline: keep the current boards */ }
+    historyBusy = false;
+  }
+
+  async function goTo(kind, target) {
+    view[kind] = target;
+    if (target === null) {
+      if (liveState) kind === 'tonight' ? showTonight(liveState.tonight, null, true) : showMonth(liveState.month, false, true);
+    } else {
+      const data = await fetch(kind === 'tonight' ? '/api/sessions/' + target : '/api/months/' + target).then(r => r.json());
+      if (view[kind] !== target) return; // user already moved on: ignore this late answer
+      kind === 'tonight' ? showTonight(data, target) : showMonth(data, true);
+    }
+    renderNav(kind);
+  }
+
+  function step(kind, dir) {
+    const list = lists[kind];
+    const idx = view[kind] === null ? list.findIndex(x => x.current) : list.findIndex(x => (x.id ?? x.key) === view[kind]);
+    const next = list[idx + (dir === 'older' ? 1 : -1)];
+    if (!next) return;
+    goTo(kind, next.current ? null : (next.id ?? next.key));
+  }
+  for (const kind of ['tonight', 'month']) {
+    document.getElementById('nav-' + kind).addEventListener('click', e => {
+      const b = e.target.closest('button[data-dir]'); if (b && !b.disabled) step(kind, b.dataset.dir);
+    });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') step(tab, 'older');
+    if (e.key === 'ArrowRight') step(tab, 'newer');
+  });
 
   let tickerTimer;
   function showTicker(g) {
