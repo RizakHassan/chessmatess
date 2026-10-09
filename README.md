@@ -54,7 +54,7 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 
 - **Club nights won (♚):** the #1 of each finished club night (most wins, Elo as tiebreak) earns a title, shown as a ♚ count next to their name on both boards and as a column in the Excel download. A night counts once logging has closed or the next session has started, and needs at least one win. Past weeks show the count as it stood then.
 - **Player pages:** tap any name on the leaderboard, in admin or under "Your stats" on the phone page. You get `/player?id=N` with current Elo and rank, nights won, record and score %, peak Elo, current streak, best win, a rating-over-time chart (hover or arrow keys for each game), head-to-head against every opponent and the full game list.
-- **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, or the ← / → keys. Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
+- **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, the ← / → keys, or swipe the board on a phone or tablet (swipe right to go back). Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
 - **Share a specific week or month:** browse to it, then copy the address. It updates as you step through, e.g. `/display?session=12` or `/display?month=2026-09`. Add `&clean` for an Instagram-ready card. The arrows are hidden in clean mode.
 
 - `1` / `2` switches between the Tonight and This month tabs. `C` toggles clean mode, which hides the header for screenshots.

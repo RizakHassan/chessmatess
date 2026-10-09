@@ -186,6 +186,8 @@
   .history .hlabel { display: flex; align-items: center; gap: 10px; font-size: 16px; white-space: nowrap; }
   .history .htag { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; background: var(--sky-soft); color: var(--slate); }
   .history .htag.past { background: var(--orange); color: var(--ink); }
+  .history .hhint { font-size: 13px; color: var(--muted); }
+  .board { touch-action: pan-y; } /* horizontal swipes flip weeks; vertical scrolling still works */
   @media (max-width: 760px) { .history .hbtn span { display: none; } .history .hlabel { font-size: 14px; } }
 
   body.clean header, body.clean .meta, body.clean .conn, body.clean .history { display: none; }
@@ -229,7 +231,7 @@
   <section class="view tonight active" id="view-tonight" aria-label="Tonight">
     <nav class="history" id="nav-tonight" aria-label="Browse club nights">
       <button class="hbtn" data-dir="older" aria-label="Previous club night">‹ <span>Previous week</span></button>
-      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span></div>
+      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span><span class="hhint" hidden>No earlier weeks yet</span></div>
       <button class="hbtn" data-dir="newer" aria-label="Next club night"><span>Next</span> ›</button>
     </nav>
     <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r" id="colNight">Tonight</div></div>
@@ -240,7 +242,7 @@
   <section class="view month" id="view-month" aria-label="This month">
     <nav class="history" id="nav-month" aria-label="Browse months">
       <button class="hbtn" data-dir="older" aria-label="Previous month">‹ <span>Previous month</span></button>
-      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span></div>
+      <div class="hlabel"><b data-label></b><span class="htag" data-tag></span><span class="hhint" hidden>No earlier months yet</span></div>
       <button class="hbtn" data-dir="newer" aria-label="Next month"><span>Next</span> ›</button>
     </nav>
     <article class="card">
@@ -464,7 +466,10 @@
     tag.classList.toggle('past', !live);
     nav.querySelector('[data-dir="older"]').disabled = idx < 0 || idx >= list.length - 1;
     nav.querySelector('[data-dir="newer"]').disabled = live;
-    nav.hidden = list.length < 2 && live; // nothing to browse yet
+    // Always visible so people know they can browse; greyed out until there's history.
+    const older = nav.querySelector('[data-dir="older"]');
+    older.title = older.disabled ? (kind === 'tonight' ? 'No earlier weeks yet' : 'No earlier months yet') : '';
+    nav.querySelector('.hhint').hidden = !(older.disabled && live);
   }
 
   let historyBusy = false;
@@ -517,6 +522,20 @@
       const b = e.target.closest('button[data-dir]'); if (b && !b.disabled) step(kind, b.dataset.dir);
     });
   }
+  // Swipe right = older (like turning back a page), swipe left = newer.
+  let swipe = null;
+  for (const kind of ['tonight', 'month']) {
+    const area = document.getElementById('view-' + kind);
+    area.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') swipe = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+    area.addEventListener('pointerup', e => {
+      if (!swipe) return;
+      const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, quick = Date.now() - swipe.t < 700;
+      swipe = null;
+      if (quick && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) step(kind, dx > 0 ? 'older' : 'newer');
+    });
+    area.addEventListener('pointercancel', () => { swipe = null; });
+  }
+
   document.addEventListener('keydown', e => {
     if (e.key === 'ArrowLeft') step(tab, 'older');
     if (e.key === 'ArrowRight') step(tab, 'newer');
