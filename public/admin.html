@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Manage players, sessions and game history for the Chessmates leaderboard.">
-<title>Chessmates Admin</title>
+<meta name="description" content="Manage players, sessions and game history for the Chessmatess leaderboard.">
+<title>Chessmatess Admin</title>
 <link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/style.css">
 <style>
@@ -77,8 +77,8 @@
 <main class="wrap">
   <header>
     <div class="brand">
-      <img class="logo" src="/logo.png" alt="Chessmates logo">
-      <div><span class="wordmark">Chessmates</span><h1>Admin</h1></div>
+      <img class="logo" src="/logo.png" alt="Chessmatess logo">
+      <div><span class="wordmark">Chessmatess</span><h1>Admin</h1></div>
     </div>
     <nav aria-label="Pages">
       <a class="btn ghost small" href="/display" target="_blank">Display ↗</a>
@@ -325,7 +325,7 @@
     const res = await fetch('/api/admin/export', { headers: { 'x-admin-pin': pin } });
     if (res.status === 401) throw new PinRequired();
     if (!res.ok) throw new Error('Could not download the export');
-    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'chessmates-export.json';
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'chessmatess-export.json';
     const url = URL.createObjectURL(await res.blob());
     const a = Object.assign(document.createElement('a'), { href: url, download: name });
     document.body.appendChild(a); a.click(); a.remove();
@@ -340,7 +340,7 @@
     if (!file) return;
     let data;
     try { data = JSON.parse(await file.text()); } catch { throw new Error('That file is not valid JSON'); }
-    if (data.format !== 'chessmates-export') throw new Error('That file is not a Chessmates export');
+    if (data.format !== 'chessmates-export') throw new Error('That file is not a Chessmatess export');
     pendingImport = data;
     importInfo.innerHTML = `<b>${esc(file.name)}</b>: ${data.players.length} players, ${data.games.length} games. This replaces everything currently in the club. <button class="btn danger small" id="confirmImport" data-confirm="Replace all data?">Restore</button>`;
   }));

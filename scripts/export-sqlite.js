@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 
-const [input, output = 'chessmates-export.json'] = process.argv.slice(2);
+const [input, output = 'chessmatess-export.json'] = process.argv.slice(2);
 if (!input || !fs.existsSync(input)) {
   console.error('Usage: npm run export-sqlite -- path/to/chessmates.db [out.json]');
   process.exit(1);

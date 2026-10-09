@@ -1,4 +1,4 @@
-# ♞ Chessmates — live club leaderboard
+# ♞ Chessmatess — live club leaderboard
 
 A web app for a weekly chess club. Players log results from their phones by scanning a QR code, and a projector shows a live leaderboard. Rows slide into their new positions and flash green or red when ratings change. The look follows the club logo: a light cream background with slate, sky blue and orange-red.
 
@@ -36,7 +36,7 @@ npm install
 npm run export-sqlite -- path/to/chessmates.db
 ```
 
-This writes `chessmates-export.json`. Upload it in **Admin → Backups → Restore from export…**.
+This writes `chessmatess-export.json`. Upload it in **Admin → Backups → Restore from export…**.
 
 ## On club night
 

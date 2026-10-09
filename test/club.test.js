@@ -22,7 +22,7 @@ test('export → import round-trips and replays Elo', () => {
 test('import rejects files that are not exports, leaving data alone', () => {
   const { club } = memoryClub();
   club.addPlayer('Amara');
-  assert.throws(() => club.importData({ hello: 1 }), /not a Chessmates export/);
+  assert.throws(() => club.importData({ hello: 1 }), /not a Chessmatess export/);
   assert.throws(() => club.importData({ format: 'chessmates-export', players: [], sessions: [], games: [{ id: 1, p1_id: 9, p2_id: 8, result: 1, session_id: 1, created_at: 'x' }] }));
   assert.strictEqual(club.listPlayers().length, 1); // failed import rolled back
 });

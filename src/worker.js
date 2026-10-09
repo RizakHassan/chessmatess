@@ -199,7 +199,7 @@ export class Club extends DurableObject {
         }
         if (sub === '/export' && method === 'GET') {
           const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-          return json(club.exportData(), 200, { 'content-disposition': `attachment; filename="chessmates-export-${stamp}.json"` });
+          return json(club.exportData(), 200, { 'content-disposition': `attachment; filename="chessmatess-export-${stamp}.json"` });
         }
         if (sub === '/import' && method === 'POST') {
           const data = await request.json().catch(() => null);

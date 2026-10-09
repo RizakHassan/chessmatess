@@ -9,4 +9,4 @@ npm-debug.log*
 backups/
 .wrangler/
 .dev.vars
-chessmates-export*.json
+chessmates*-export*.json

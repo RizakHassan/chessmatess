@@ -388,7 +388,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
 
   // Replaces all players, sessions and games with an export, then replays Elo.
   function importData(data) {
-    if (!data || data.format !== 'chessmates-export') throw new Error('That file is not a Chessmates export');
+    if (!data || data.format !== 'chessmates-export') throw new Error('That file is not a Chessmatess export');
     const players = Array.isArray(data.players) ? data.players : [];
     const sessions = Array.isArray(data.sessions) ? data.sessions : [];
     const games = Array.isArray(data.games) ? data.games : [];

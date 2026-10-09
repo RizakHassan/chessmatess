@@ -38,7 +38,7 @@
 </head>
 <body>
 <main class="sheet">
-  <div class="brand"><img class="logo" src="/logo.png" alt="Chessmates logo"><span class="wordmark">Chessmates</span></div>
+  <div class="brand"><img class="logo" src="/logo.png" alt="Chessmatess logo"><span class="wordmark">Chessmatess</span></div>
   <h1>Finished a game?</h1>
   <p class="sub">Scan with your phone camera to log the result on the live leaderboard.</p>
 
@@ -79,7 +79,7 @@
     const qr = qrcode(0, 'M');
     qr.addData(url);
     qr.make();
-    document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code linking to the Chessmates log page' });
+    document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code linking to the Chessmatess log page' });
     document.getElementById('url').textContent = url;
     document.getElementById('pinForm').hidden = true;
     document.getElementById('sheet').hidden = false;
