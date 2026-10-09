@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "wrangler dev --ip 0.0.0.0",
     "deploy": "wrangler deploy",
-    "test": "node --test test/*.test.js",
-    "export-sqlite": "node scripts/export-sqlite.js"
+    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js",
+    "export-sqlite": "node --no-warnings=ExperimentalWarning scripts/export-sqlite.js"
   },
   "repository": {
     "type": "git",
@@ -20,11 +20,13 @@
   "homepage": "https://github.com/RizakHassan/chessmatess#readme",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "devDependencies": {
-    "better-sqlite3": "^13.0.3",
     "wrangler": "^4.148.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "fflate": "^0.8.3"
+  }
 }

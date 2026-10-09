@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { createClub, DuplicateError } from '../src/core.js';
-import { memoryClub } from './helpers.js';
+import { memoryClub, sqlAdapter } from './helpers.js';
 
 const PHONE_A = 'aaaaaaaa1111', PHONE_B = 'bbbbbbbb2222';
 
@@ -71,12 +71,12 @@ test('admin can delete everything one phone logged, and Elo is replayed', () => 
 });
 
 test('an existing database without device_id is upgraded in place', () => {
-  const db = new Database(':memory:');
+  const db = new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, p1_id INTEGER NOT NULL, p2_id INTEGER NOT NULL,
            result REAL NOT NULL, p1_delta REAL NOT NULL DEFAULT 0, p2_delta REAL NOT NULL DEFAULT 0,
            session_id INTEGER NOT NULL, created_at TEXT NOT NULL)`);
   db.exec(`INSERT INTO games (p1_id, p2_id, result, session_id, created_at) VALUES (1, 2, 1, 1, '2026-10-05T19:00:00Z')`);
-  const sql = { all: (q, ...p) => { const s = db.prepare(q); if (s.reader) return s.all(...p); s.run(...p); return []; }, transaction: fn => db.transaction(fn)() };
+  const sql = sqlAdapter(db);
   createClub(sql);
   const cols = db.prepare('PRAGMA table_info(games)').all().map(c => c.name);
   assert.ok(cols.includes('device_id'));

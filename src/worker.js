@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createClub } from './core.js';
+import { buildXlsx } from './xlsx.js';
 
 /*
   Routing: the Worker serves static pages from /public and forwards /api/* and /ws
@@ -69,6 +70,35 @@ export class Club extends DurableObject {
     this.fails = new Map(); // `${kind}:${ip}` -> { count, until } for PIN / club-code guessing
     // Answer client heartbeats without waking the object.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    // Make sure the next club-night alarm is booked (e.g. after a deploy or first start).
+    ctx.blockConcurrencyWhile(async () => { if (!(await ctx.storage.getAlarm())) await this.schedule(); });
+  }
+
+  /* ---------- schedule: auto session at opening, backup at closing ---------- */
+
+  async schedule() {
+    // Look just past now so an event that just fired isn't booked again.
+    const { opening, closing } = this.club.nextEvents(new Date(Date.now() + 1000));
+    const due = { open: opening ? opening.getTime() : null, close: closing ? closing.getTime() : null };
+    this.club.setSetting('scheduled', JSON.stringify(due));
+    const next = [due.open, due.close].filter(Boolean).sort((a, b) => a - b)[0];
+    if (next) await this.ctx.storage.setAlarm(next);
+    else await this.ctx.storage.deleteAlarm();
+  }
+
+  async alarm() {
+    const club = this.club;
+    let due = {};
+    try { due = JSON.parse(club.getSetting('scheduled') || '{}'); } catch {}
+    const soon = Date.now() + 1000; // alarms never fire early; anything due by now is handled
+    let changed = false;
+    if (due.open && due.open <= soon) {
+      // Tonight's session starts by itself, with a fresh QR code.
+      if (club.autoStartSession()) { this.rotateClubCode(); changed = true; }
+    }
+    if (due.close && due.close <= soon) club.saveBackup('After club night', { ifChanged: true });
+    if (changed) this.broadcast();
+    await this.schedule();
   }
 
   /* ---------- live updates ---------- */
@@ -196,7 +226,10 @@ export class Club extends DurableObject {
         if (sub === '/check' && method === 'POST') return json({ ok: true });
         if (sub === '/players' && method === 'GET') return json(club.listPlayers({ includeRemoved: true }));
         if (sub === '/players' && method === 'POST') { const { name, force } = await body(); return mutate(() => ({ player: club.addPlayer(name, { force: force === true }) })); }
-        if (sub === '/players/merge' && method === 'POST') { const { keep, drop } = await body(); return mutate(() => club.mergePlayers(keep, drop)); }
+        if (sub === '/players/merge' && method === 'POST') {
+          const { keep, drop } = await body();
+          return mutate(() => { club.saveBackup('Before merging players'); return club.mergePlayers(keep, drop); });
+        }
         if (sub === '/games' && method === 'GET') return json(club.recentGames(Math.min(Number(url.searchParams.get('limit')) || 100, 1000)));
         if (sub === '/session' && method === 'GET') return json(club.currentSession());
         // Each new session gets a new club code, so last week's QR stops working.
@@ -212,10 +245,31 @@ export class Club extends DurableObject {
         if (idMatch?.[1] === 'games' && !idMatch[3] && method === 'DELETE') return mutate(() => club.deleteGame(id));
 
         const deviceMatch = sub.match(/^\/devices\/([A-Za-z0-9-]{8,64})\/games$/);
-        if (deviceMatch && method === 'DELETE') return mutate(() => ({ removed: club.deleteGamesByDevice(deviceMatch[1]) }));
+        if (deviceMatch && method === 'DELETE') {
+          return mutate(() => { club.saveBackup("Before deleting a phone's games"); return { removed: club.deleteGamesByDevice(deviceMatch[1]) }; });
+        }
 
         if (sub === '/hours' && method === 'GET') return json(club.loggingStatus());
-        if (sub === '/hours' && method === 'PUT') { const h = await body(); return mutate(() => ({ status: (club.setHours(h), club.loggingStatus()) })); }
+        if (sub === '/hours' && method === 'PUT') {
+          const h = await body();
+          const res = mutate(() => ({ status: (club.setHours(h), club.loggingStatus()) }));
+          await this.schedule(); // hours changed: rebook the alarm
+          return res;
+        }
+
+        if (sub === '/backups' && method === 'GET') {
+          let due = {};
+          try { due = JSON.parse(club.getSetting('scheduled') || '{}'); } catch {}
+          return json({ backups: club.listBackups(), next: due });
+        }
+        if (sub === '/backups' && method === 'POST') return json({ ok: true, backup: club.saveBackup('Manual backup') });
+        const backupMatch = sub.match(/^\/backups\/(\d+)(\/restore)?$/);
+        if (backupMatch && !backupMatch[2] && method === 'GET') {
+          const data = club.getBackup(Number(backupMatch[1]));
+          const stamp = String(data.exported_at || '').slice(0, 16).replace(/[:T]/g, '-');
+          return json(data, 200, { 'content-disposition': `attachment; filename="chessmatess-backup-${stamp}.json"` });
+        }
+        if (backupMatch && backupMatch[2] && method === 'POST') return mutate(() => ({ imported: club.restoreBackup(Number(backupMatch[1])) }));
 
         if (sub === '/club-code' && method === 'GET') return json({ code: club.getSetting('club_code') });
         if (sub === '/club-code' && method === 'POST') return mutate(() => ({ code: this.rotateClubCode() }));
@@ -223,9 +277,18 @@ export class Club extends DurableObject {
           const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
           return json(club.exportData(), 200, { 'content-disposition': `attachment; filename="chessmatess-export-${stamp}.json"` });
         }
+        if (sub === '/export.xlsx' && method === 'GET') {
+          const stamp = new Date().toISOString().slice(0, 10);
+          return new Response(buildXlsx(club.spreadsheetSheets()), { headers: {
+            'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'content-disposition': `attachment; filename="chessmatess-${stamp}.xlsx"`,
+            'cache-control': 'no-store',
+          } });
+        }
         if (sub === '/import' && method === 'POST') {
           const data = await request.json().catch(() => null);
-          return mutate(() => ({ imported: club.importData(data) }));
+          if (!data || data.format !== 'chessmates-export') throw new Error('That file is not a Chessmatess export');
+          return mutate(() => { club.saveBackup('Before restore'); return { imported: club.importData(data) }; });
         }
       }
 

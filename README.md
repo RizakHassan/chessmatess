@@ -17,7 +17,7 @@ It runs on **Cloudflare** with nothing to keep switched on. A Worker serves the 
 
 You need a free Cloudflare account and this repo on GitHub.
 
-1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Keep the defaults: no build command, deploy command `npx wrangler deploy`, root `/`. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
+1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Use build command `npm test`, deploy command `npx wrangler deploy`, root `/`. With `npm test` as the build command, a push with failing tests stops instead of going live. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
 2. **Set the admin PIN.** Open the new Worker and go to **Settings → Variables and Secrets → Add**. Choose type **Secret**, name it `ADMIN_PIN`, and give it a value of at least 8 characters. Save it. Until this is set, admin is locked.
 3. **Open the app** at `https://chessmatess.com/admin` on the laptop that drives the projector, and enter the PIN. That browser remembers the PIN, so `/display` on it shows the join QR code.
 
@@ -44,6 +44,8 @@ This writes `chessmatess-export.json`. Upload it in **Admin → Backups → Rest
 2. Put `/display` on the projector and press `F11` for full screen. The current QR code shows on the right of the **Tonight** tab. It only appears on a browser that has the admin PIN saved, and never on the **This month** tab or in clean mode, so Instagram screenshots don't leak it.
 3. Players scan the QR with their phone camera. Phones just need mobile data or any Wi-Fi.
 
+**Automatic sessions.** When logging opens, a new session starts by itself, with a new QR code, so you no longer have to click **Start new session**. It's skipped if a session was already started in the last 12 hours. Turn it off in **Admin → Logging hours**.
+
 **Logging hours.** Phones can only log games and add names during club hours. The default is Mondays 18:00–22:00 in the club's timezone. Change the days and times, or tick **Always open**, in **Admin → Logging hours**. Outside the hours, the phone page says when logging opens next, and the server refuses results too. Undo still works for its 60 seconds after closing.
 
 If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works until the next **Start new session**.
@@ -69,9 +71,15 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 - **One person, one player.** After someone adds or picks their name, their phone remembers it ("You're Rizak Hassan on this phone"). Adding a name that looks like an existing player shows "Is one of these you?". That covers the same first name ("Rizak" vs "Rizak Hassan"), small typos and accents. Exact repeats are never allowed.
 - **Merge.** If a duplicate still slips in, open **Admin → Players → Merge…** on the extra entry and choose who to keep. Their games move across, the extra name is removed, and Elo is replayed. Two players who have played each other can't be merged.
 
-## Backups
+## Backups & downloads
 
-Cloudflare keeps 30 days of point-in-time history for the club database automatically. For a copy you control, click **Download export** in **Admin → Backups** now and then. **Restore from export…** replaces everything with a downloaded export and replays Elo.
+Everything is in **Admin → Backups & downloads**:
+
+- **Automatic backups.** A backup is saved inside the club database when logging closes after each club night, but only if anything changed. One is also saved before any restore, player merge or "delete all from this phone", so those can be undone. If logging is set to always open, the backup runs daily at 04:00 instead. The newest 20 are kept, and each has **Download** and **Restore** buttons. Restoring saves the current state first, so a restore can be undone too.
+- **Download Excel.** A spreadsheet with **Players** (rank, Elo, W/D/L, status), **Games** (date, session, white, black, result, Elo changes, phone tag) and **Sessions**. Dates are in club time, and the sheets have filters and frozen headers.
+- **Download backup file / Restore from file.** A JSON copy of everything. It's best kept somewhere outside Cloudflare (Drive, email, USB) in case the account itself is ever lost.
+
+Cloudflare also keeps 30 days of point-in-time history for the database, but restoring from that needs a developer.
 
 ## How ratings work
 
@@ -92,13 +100,13 @@ settings (key, value)                                  -- club code, retired cod
 
 ## Development
 
-You need Node.js 20 or newer.
+You need Node.js 22.13 or newer.
 
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # sets ADMIN_PIN for local use
 npm run dev                      # local Cloudflare runtime on http://localhost:8787
-npm test                         # Elo, replay, export/import and timezone tests
+npm test                         # all tests (Node's built-in SQLite, no native add-ons)
 ```
 
 `npm run dev` also listens on your local network, so phones on the same Wi-Fi can test with your computer's IP. Open `/qr` from that IP address so the QR points at it. Local data is stored in `.wrangler/`, which git ignores.
@@ -107,7 +115,8 @@ npm test                         # Elo, replay, export/import and timezone tests
 
 ```
 src/core.js          Club logic: schema, Elo maths, replay, standings, export/import
-src/worker.js        Cloudflare Worker routing + Club Durable Object (API, WebSockets, auth)
+src/worker.js        Cloudflare Worker routing + Club Durable Object (API, WebSockets, auth, alarms)
+src/xlsx.js          Minimal Excel (.xlsx) writer
 wrangler.jsonc       Cloudflare config (Durable Object, static assets, timezone)
 public/live.js       WebSocket client with reconnect + heartbeat
 public/display.html  Projector leaderboard (FLIP slide animations, glow flashes)
@@ -118,6 +127,6 @@ public/style.css     Shared design tokens from the logo palette
 public/fonts/        Self-hosted Geist + Geist Mono (OFL)
 public/vendor/       qrcode-generator (MIT)
 scripts/             export-sqlite: convert a laptop-version database to an export
-test/                Node tests against the same core using an in-memory SQLite
+test/                Node tests against the same core using Node's built-in SQLite
 .agents/skills/      Design skills from Leonxlnx/taste-skill
 ```

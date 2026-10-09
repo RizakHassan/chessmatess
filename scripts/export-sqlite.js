@@ -2,14 +2,14 @@
 // into a JSON export you can upload in Admin → Backups → "Restore from export".
 //   npm run export-sqlite -- path/to/chessmates.db [out.json]
 import fs from 'node:fs';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 const [input, output = 'chessmatess-export.json'] = process.argv.slice(2);
 if (!input || !fs.existsSync(input)) {
   console.error('Usage: npm run export-sqlite -- path/to/chessmates.db [out.json]');
   process.exit(1);
 }
-const db = new Database(input, { readonly: true, fileMustExist: true });
+const db = new DatabaseSync(input, { readOnly: true });
 const data = {
   format: 'chessmates-export',
   version: 1,

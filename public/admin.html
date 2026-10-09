@@ -34,6 +34,12 @@
 
   .pin { max-width: 420px; margin: 8vh auto 0; }
   .code { font-size: 22px; letter-spacing: .12em; }
+  .backup-list { list-style: none; margin: 0; padding: 0; }
+  .backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .backup-list li:last-child { border-bottom: 0; }
+  .backup-list .why { color: var(--muted); }
+  .backup-list .actions { flex: none; gap: 4px; }
+  #hoursForm.always .auto { opacity: .4; pointer-events: none; }
   .days { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; margin: 0 0 12px; }
   .days label { cursor: pointer; }
   .days input { position: absolute; opacity: 0; pointer-events: none; }
@@ -135,7 +141,8 @@
         <p class="lead">Phones can only log games (and add names) during these hours, in the club's timezone. Admin can still fix things at any time.</p>
         <div class="current" id="hoursStatus"><span class="muted">Loading…</span></div>
         <form id="hoursForm">
-          <label class="toggle" style="margin-bottom: 12px"><input type="checkbox" id="hoursAlways"> Always open</label>
+          <label class="toggle" style="margin-bottom: 8px"><input type="checkbox" id="hoursAlways"> Always open</label>
+          <label class="toggle auto" style="margin-bottom: 12px"><input type="checkbox" id="hoursAuto"> Start a new session (and QR code) automatically when logging opens</label>
           <fieldset class="days" id="hoursDays" aria-label="Days"></fieldset>
           <div class="times">
             <label class="field"><span>From</span><input class="input" type="time" id="hoursStart" required></label>
@@ -157,11 +164,15 @@
       </section>
 
       <section class="panel">
-        <h2>Backups</h2>
-        <p class="lead">Cloudflare keeps 30 days of history for the club database automatically. Download an export now and then to keep your own copy somewhere else.</p>
-        <div class="actions">
-          <button class="btn primary" id="exportBtn">Download export</button>
-          <label class="btn ghost" for="importFile">Restore from export…</label>
+        <h2>Backups &amp; downloads</h2>
+        <p class="lead">A backup is saved automatically after every club night (if anything changed) and before any restore, merge or bulk delete. The newest 20 are kept. Restoring is undoable too.</p>
+        <div class="current" id="backupStatus"><span class="muted">Loading…</span></div>
+        <ul class="backup-list" id="backupList"></ul>
+        <div class="actions" style="margin-top: 12px">
+          <button class="btn primary" id="xlsxBtn">Download Excel</button>
+          <button class="btn" id="backupNow">Back up now</button>
+          <button class="btn ghost" id="exportBtn" title="Full copy for restoring later or keeping somewhere safe">Download backup file</button>
+          <label class="btn ghost" for="importFile">Restore from file…</label>
           <input type="file" id="importFile" accept="application/json,.json" hidden>
         </div>
         <p class="muted" id="importInfo" style="margin: 12px 0 0"></p>
@@ -265,6 +276,7 @@
     renderGames(games);
     renderCode((await api('GET', '/club-code')).code);
     renderHours(await api('GET', '/hours'));
+    renderBackups(await api('GET', '/backups'));
   }
 
   function renderSession(s) {
@@ -356,6 +368,7 @@
     if (hoursDirty) return; // don't overwrite what the admin is editing
     const h = status.hours;
     document.getElementById('hoursAlways').checked = h.always;
+    document.getElementById('hoursAuto').checked = h.autoSession !== false;
     hoursForm.classList.toggle('always', h.always);
     hoursForm.querySelectorAll('#hoursDays input').forEach(i => { i.checked = h.days.includes(Number(i.value)); });
     document.getElementById('hoursStart').value = h.start;
@@ -365,6 +378,7 @@
     e.preventDefault();
     const body = {
       always: document.getElementById('hoursAlways').checked,
+      autoSession: document.getElementById('hoursAuto').checked,
       days: [...hoursForm.querySelectorAll('#hoursDays input:checked')].map(i => Number(i.value)),
       start: document.getElementById('hoursStart').value,
       end: document.getElementById('hoursEnd').value,
@@ -394,16 +408,46 @@
     toast('Code changed. Print the new QR code.');
   }));
 
-  // Export goes through fetch so the admin PIN header is sent.
-  document.getElementById('exportBtn').addEventListener('click', run(async () => {
-    const res = await fetch('/api/admin/export', { headers: { 'x-admin-pin': pin } });
+  // Downloads go through fetch so the admin PIN header is sent.
+  async function download(path, fallbackName) {
+    const res = await fetch('/api/admin' + path, { headers: { 'x-admin-pin': pin } });
     if (res.status === 401) throw new PinRequired();
-    if (!res.ok) throw new Error('Could not download the export');
-    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'chessmatess-export.json';
+    if (!res.ok) throw new Error('Could not download that file');
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || fallbackName;
     const url = URL.createObjectURL(await res.blob());
     const a = Object.assign(document.createElement('a'), { href: url, download: name });
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  document.getElementById('exportBtn').addEventListener('click', run(() => download('/export', 'chessmatess-export.json')));
+  document.getElementById('xlsxBtn').addEventListener('click', run(() => download('/export.xlsx', 'chessmatess.xlsx')));
+
+  /* ---------- saved backups ---------- */
+  const whenLong = iso => new Date(iso).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  function renderBackups({ backups, next }) {
+    const nextBits = [];
+    if (next?.open) nextBits.push(`next auto session ${whenLong(new Date(next.open).toISOString())}`);
+    if (next?.close) nextBits.push(`next backup ${whenLong(new Date(next.close).toISOString())}`);
+    document.getElementById('backupStatus').innerHTML = backups.length
+      ? `<b>Last backup ${esc(whenLong(backups[0].created_at))}</b><span class="muted">${esc(nextBits.join(' · '))}</span>`
+      : `<span class="muted">No backups yet. ${esc(nextBits.join(' · '))}</span>`;
+    document.getElementById('backupList').innerHTML = backups.slice(0, 6).map(b => `
+      <li data-id="${b.id}"><span>${esc(whenLong(b.created_at))} <span class="why">· ${esc(b.reason)} · ${b.players} players, ${b.games} games</span></span>
+        <span class="actions"><button class="btn ghost small" data-act="dl">Download</button><button class="btn danger small" data-act="restore" data-confirm="Restore?">Restore</button></span></li>`).join('');
+  }
+  document.getElementById('backupNow').addEventListener('click', run(async () => {
+    const { backup } = await api('POST', '/backups');
+    toast(`Backup saved: ${backup.players} players, ${backup.games} games`);
+    renderBackups(await api('GET', '/backups'));
+  }));
+  document.getElementById('backupList').addEventListener('click', run(async e => {
+    const btn = e.target.closest('button[data-act]'); if (!btn) return;
+    const id = btn.closest('li').dataset.id;
+    if (btn.dataset.act === 'dl') return download(`/backups/${id}`, `chessmatess-backup-${id}.json`);
+    if (!armed(btn)) return;
+    const { imported } = await api('POST', `/backups/${id}/restore`);
+    toast(`Restored ${imported.players} players and ${imported.games} games. The previous state was backed up first.`);
+    await load();
   }));
 
   const importFile = document.getElementById('importFile');
@@ -416,7 +460,7 @@
     try { data = JSON.parse(await file.text()); } catch { throw new Error('That file is not valid JSON'); }
     if (data.format !== 'chessmates-export') throw new Error('That file is not a Chessmatess export');
     pendingImport = data;
-    importInfo.innerHTML = `<b>${esc(file.name)}</b>: ${data.players.length} players, ${data.games.length} games. This replaces everything currently in the club. <button class="btn danger small" id="confirmImport" data-confirm="Replace all data?">Restore</button>`;
+    importInfo.innerHTML = `<b>${esc(file.name)}</b>: ${data.players.length} players, ${data.games.length} games. This replaces everything currently in the club (a backup of the current state is saved first). <button class="btn danger small" id="confirmImport" data-confirm="Replace all data?">Restore</button>`;
   }));
   importInfo.addEventListener('click', run(async e => {
     const btn = e.target.closest('#confirmImport'); if (!btn || !armed(btn)) return;

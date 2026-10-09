@@ -31,6 +31,15 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS games_session ON games(session_id)`,
   `CREATE INDEX IF NOT EXISTS games_created ON games(created_at)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS backups (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at  TEXT NOT NULL,
+    reason      TEXT NOT NULL,
+    players     INTEGER NOT NULL,
+    games       INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    data        TEXT NOT NULL
+  )`,
 ];
 
 export function eloDelta(ratingA, ratingB, scoreA) {
@@ -46,6 +55,20 @@ function tzOffset(date, timeZone) {
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(date.getTime() / 1000) * 1000;
 }
 
+// The UTC instant of a wall-clock time (minutes past midnight) on a local date in `timeZone`.
+function localToUtc(year, month, day, minutes, timeZone) {
+  const guess = Date.UTC(year, month, day, Math.floor(minutes / 60), minutes % 60);
+  const first = guess - tzOffset(new Date(guess), timeZone);
+  return new Date(guess - tzOffset(new Date(first), timeZone));
+}
+
+// FNV-1a: a cheap fingerprint to skip backups when nothing changed.
+function fingerprint(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16);
+}
+
 // The UTC instant of local midnight on the 1st of (year, month) in `timeZone`.
 function monthStartUtc(year, month, timeZone) {
   const guess = new Date(Date.UTC(year, month, 1));
@@ -53,7 +76,10 @@ function monthStartUtc(year, month, timeZone) {
   return new Date(guess.getTime() - tzOffset(first, timeZone)); // re-check across a DST change
 }
 
-export const DEFAULT_HOURS = { always: false, days: [1], start: '18:00', end: '22:00' }; // Mondays 6pm–10pm
+export const DEFAULT_HOURS = { always: false, days: [1], start: '18:00', end: '22:00', autoSession: true }; // Mondays 6pm–10pm
+export const KEEP_BACKUPS = 20;
+const AUTO_SESSION_GRACE_MS = 12 * 60 * 60 * 1000; // a session started this recently counts as tonight's
+const ALWAYS_OPEN_BACKUP_AT = '04:00';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const toMinutes = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };
 const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t));
@@ -144,9 +170,10 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     try { return { ...DEFAULT_HOURS, ...JSON.parse(getSetting('logging_hours') || '{}') }; } catch { return { ...DEFAULT_HOURS }; }
   }
 
-  function setHours({ always, days, start, end }) {
+  function setHours({ always, days, start, end, autoSession = true }) {
     const hours = {
       always: !!always,
+      autoSession: !!autoSession,
       days: [...new Set((Array.isArray(days) ? days : []).map(Number))].filter(d => d >= 0 && d <= 6).sort(),
       start: String(start), end: String(end),
     };
@@ -180,6 +207,41 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     return { open, hours, next, closes: open ? hours.end : null };
   }
 
+  // Next opening (start of club hours) and next closing after `after`, as UTC Dates.
+  // With always-open there is no opening; "closing" becomes a daily 04:00 backup time.
+  function nextEvents(after = clock()) {
+    const hours = getHours();
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short' })
+      .formatToParts(after).map(x => [x.type, x.value]));
+    const today = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday);
+    const y = Number(p.year), m = Number(p.month) - 1, d = Number(p.day);
+    const start = toMinutes(hours.always ? ALWAYS_OPEN_BACKUP_AT : hours.start), end = toMinutes(hours.end);
+    let opening = null, closing = null;
+    for (let offset = -1; offset <= 8; offset++) {
+      const dayOfWeek = (today + offset + 7) % 7;
+      if (hours.always) {
+        const at = localToUtc(y, m, d + offset, start, timeZone);
+        if (at > after && (!closing || at < closing)) closing = at;
+        continue;
+      }
+      if (!hours.days.includes(dayOfWeek)) continue;
+      const open = localToUtc(y, m, d + offset, start, timeZone);
+      const close = localToUtc(y, m, d + offset + (end <= start ? 1 : 0), end, timeZone);
+      if (open > after && (!opening || open < opening)) opening = open;
+      if (close > after && (!closing || close < closing)) closing = close;
+    }
+    return { opening, closing, autoSession: !hours.always && hours.autoSession !== false };
+  }
+
+  // Called when club hours open: start tonight's session unless one was started recently.
+  function autoStartSession() {
+    const hours = getHours();
+    if (hours.always || hours.autoSession === false) return null;
+    const current = currentSession();
+    if (current && clock().getTime() - Date.parse(current.created_at) < AUTO_SESSION_GRACE_MS) return null;
+    return startSession();
+  }
+
   function requireLoggingOpen() {
     const status = loggingStatus();
     if (!status.open) {
@@ -192,7 +254,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   const currentSession = () => one('SELECT * FROM sessions ORDER BY id DESC LIMIT 1');
 
   function startSession(label) {
-    const fallback = new Date().toLocaleDateString('en-GB', { timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const fallback = clock().toLocaleDateString('en-GB', { timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     return one('INSERT INTO sessions (label, created_at) VALUES (?, ?) RETURNING *', cleanName(label) || fallback, now());
   }
 
@@ -436,6 +498,96 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     };
   }
 
+  /* ---------- backups (stored in the club database) ---------- */
+
+  function saveBackup(reason, { ifChanged = false } = {}) {
+    const data = exportData();
+    const body = JSON.stringify({ players: data.players, sessions: data.sessions, games: data.games });
+    const fp = fingerprint(body);
+    if (ifChanged) {
+      const last = one('SELECT fingerprint FROM backups ORDER BY id DESC LIMIT 1');
+      if (last && last.fingerprint === fp) return null;
+      if (!last && !data.players.length) return null; // nothing to back up yet
+    }
+    const row = one(`INSERT INTO backups (created_at, reason, players, games, fingerprint, data)
+                     VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, reason, players, games`,
+      now(), String(reason).slice(0, 80), data.players.length, data.games.length, fp, JSON.stringify(data));
+    sql.all('DELETE FROM backups WHERE id NOT IN (SELECT id FROM backups ORDER BY id DESC LIMIT ?)', KEEP_BACKUPS);
+    return row;
+  }
+
+  const listBackups = () => sql.all('SELECT id, created_at, reason, players, games FROM backups ORDER BY id DESC');
+
+  function getBackup(id) {
+    const row = one('SELECT data FROM backups WHERE id = ?', Number(id));
+    if (!row) throw new Error('Backup not found');
+    return JSON.parse(row.data);
+  }
+
+  // Restoring is itself undoable: the current state is saved first.
+  function restoreBackup(id) {
+    const data = getBackup(id);
+    saveBackup('Before restore');
+    return importData(data);
+  }
+
+  /* ---------- spreadsheet ---------- */
+
+  // Sheets for the Excel download: readable names, real dates in club time, one row per thing.
+  function spreadsheetSheets() {
+    const localDate = iso => { const d = new Date(iso); return (d.getTime() + tzOffset(d, timeZone)) / 86400000 + 25569; };
+    const players = sql.all('SELECT * FROM players');
+    const byId = new Map(players.map(p => [p.id, p]));
+    const games = sql.all(`SELECT g.*, s.label AS session_label FROM games g JOIN sessions s ON s.id = g.session_id ORDER BY g.created_at, g.id`);
+    const stats = tally(games);
+    const ranked = players.filter(p => p.active).sort((a, b) => b.elo - a.elo);
+    const rankOf = new Map(ranked.map((p, i) => [p.id, i + 1]));
+    const resultText = r => (r === 1 ? '1–0' : r === 0 ? '0–1' : '½–½');
+    const sessionGames = new Map();
+    for (const g of games) {
+      const e = sessionGames.get(g.session_id) || { games: 0, players: new Set() };
+      e.games++; e.players.add(g.p1_id); e.players.add(g.p2_id);
+      sessionGames.set(g.session_id, e);
+    }
+    return [
+      {
+        name: 'Players',
+        columns: [
+          { header: 'Rank', width: 7, type: 'int' }, { header: 'Name', width: 24 }, { header: 'Elo', width: 8, type: 'int' },
+          { header: 'Games', width: 8, type: 'int' }, { header: 'Wins', width: 7, type: 'int' }, { header: 'Draws', width: 7, type: 'int' },
+          { header: 'Losses', width: 8, type: 'int' }, { header: 'Status', width: 10 }, { header: 'Joined', width: 17, type: 'date' },
+        ],
+        rows: [...players].sort((a, b) => b.active - a.active || b.elo - a.elo).map(p => {
+          const t = stats.get(p.id) || { games: 0, w: 0, d: 0, l: 0 };
+          return [rankOf.get(p.id) ?? null, p.name, Math.round(p.elo), t.games, t.w, t.d, t.l, p.active ? 'Active' : 'Removed', localDate(p.created_at)];
+        }),
+      },
+      {
+        name: 'Games',
+        columns: [
+          { header: 'Date', width: 17, type: 'date' }, { header: 'Session', width: 26 }, { header: 'White', width: 22 },
+          { header: 'Black', width: 22 }, { header: 'Result', width: 8 }, { header: 'White Elo change', width: 16, type: 'int' },
+          { header: 'Black Elo change', width: 16, type: 'int' }, { header: 'Logged by phone', width: 15 },
+        ],
+        rows: [...games].reverse().map(g => [
+          localDate(g.created_at), g.session_label, byId.get(g.p1_id)?.name ?? '?', byId.get(g.p2_id)?.name ?? '?',
+          resultText(g.result), Math.round(g.p1_delta), Math.round(g.p2_delta), g.device_id ? g.device_id.slice(0, 4).toUpperCase() : 'admin',
+        ]),
+      },
+      {
+        name: 'Sessions',
+        columns: [
+          { header: 'Started', width: 17, type: 'date' }, { header: 'Session', width: 28 },
+          { header: 'Games', width: 8, type: 'int' }, { header: 'Players', width: 8, type: 'int' },
+        ],
+        rows: sql.all('SELECT * FROM sessions ORDER BY id DESC').map(sn => {
+          const e = sessionGames.get(sn.id);
+          return [localDate(sn.created_at), sn.label, e ? e.games : 0, e ? e.players.size : 0];
+        }),
+      },
+    ];
+  }
+
   /* ---------- export / import ---------- */
 
   function exportData() {
@@ -476,11 +628,12 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   }
 
   return {
-    getSetting, setSetting, getHours, setHours, loggingStatus, requireLoggingOpen,
+    getSetting, setSetting, getHours, setHours, loggingStatus, requireLoggingOpen, nextEvents, autoStartSession,
+    saveBackup, listBackups, getBackup, restoreBackup,
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
     tonightStandings, monthStandings, snapshot,
-    exportData, importData,
+    exportData, importData, spreadsheetSheets,
   };
 }
