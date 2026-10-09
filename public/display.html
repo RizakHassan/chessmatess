@@ -382,7 +382,7 @@
     document.getElementById('sessionLabel').textContent = t.session ? t.session.label : 'No session started yet';
     // A new result always brings the screen back to the live boards.
     const g0 = state.latest;
-    if (g0 && lastGameId !== null && g0.id > lastGameId) { view.tonight = null; view.month = null; }
+    if (g0 && lastGameId !== null && g0.id > lastGameId) { view.tonight = null; view.month = null; syncUrl(); }
     if (view.tonight === null) showTonight(t);
     if (view.month === null) showMonth(state.month);
     loadHistory();
@@ -492,6 +492,17 @@
       kind === 'tonight' ? showTonight(data, target) : showMonth(data, true);
     }
     renderNav(kind);
+    syncUrl();
+  }
+
+  // Keep the address bar pointing at what's shown, so a past week can be copied and shared.
+  function syncUrl() {
+    const q = new URLSearchParams(location.search);
+    q.delete('session'); q.delete('month');
+    if (view.tonight !== null) q.set('session', view.tonight);
+    if (view.month !== null) q.set('month', view.month);
+    const qs = q.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   }
 
   function step(kind, dir) {
