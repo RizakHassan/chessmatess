@@ -151,3 +151,8 @@ h1, h2, h3 { text-wrap: balance; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* credit footer on every page */
+.site-foot { text-align: center; font-size: 13px; color: var(--muted); padding: 8px 16px calc(28px + env(safe-area-inset-bottom)); }
+.site-foot a { color: var(--slate); font-weight: 600; text-decoration: none; }
+.site-foot a:hover { text-decoration: underline; text-underline-offset: 3px; }

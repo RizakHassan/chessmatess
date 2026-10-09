@@ -332,5 +332,5 @@ function notFound() {
 p{color:var(--muted);margin:0 0 24px}nav{display:flex;gap:8px;flex-wrap:wrap}</style></head>
 <body><main><h1>Page not found</h1><p>There is nothing at this address. Try one of these instead.</p>
 <nav><a class="btn primary" href="/display">Leaderboard</a><a class="btn ghost" href="/admin">Admin</a></nav>
-</main></body></html>`, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } });
+</main><footer class="site-foot">Designed by <a href="https://rizak.dev" target="_blank" rel="noopener">rizak.dev</a></footer></body></html>`, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
