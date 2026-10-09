@@ -19,12 +19,12 @@ You need a free Cloudflare account and this repo on GitHub.
 
 1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Keep the defaults: no build command, deploy command `npx wrangler deploy`, root `/`. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
 2. **Set the admin PIN.** Open the new Worker and go to **Settings → Variables and Secrets → Add**. Choose type **Secret**, name it `ADMIN_PIN`, and give it a value of at least 8 characters. Save it. Until this is set, admin is locked.
-3. **Open the app** at `https://chessmatess.<your-subdomain>.workers.dev/admin` on the laptop that drives the projector, and enter the PIN. That browser remembers the PIN, so `/display` on it shows the join QR code.
+3. **Open the app** at `https://chessmatess.com/admin` on the laptop that drives the projector, and enter the PIN. That browser remembers the PIN, so `/display` on it shows the join QR code.
 
 From now on, **every push to `main` deploys automatically.** The database lives in the Durable Object, so deploys never touch your data.
 
 **Optional extras:**
-- **Your own domain:** go to **Settings → Domains & Routes → Add → Custom domain**, for example `chess.yourclub.com`. Reprint the QR afterwards, because it encodes whatever address you open `/qr` from.
+- **Your own domain:** the app runs at **https://chessmatess.com**. The domain is registered at GoDaddy, with its nameservers pointing at Cloudflare. It's attached under **Worker → Settings → Domains & Routes → Custom domain** for both `chessmatess.com` and `www.chessmatess.com`. `www` and the old `workers.dev` address redirect to `chessmatess.com` (`CANONICAL_HOST` in `wrangler.jsonc`), so every phone uses one address.
 - **Timezone:** the club timezone (default `Europe/London`) decides where "This month" starts and ends and how sessions are named. Change `CLUB_TIMEZONE` in `wrangler.jsonc` and push.
 
 ### Moving data from the old laptop version

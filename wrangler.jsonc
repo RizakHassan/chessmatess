@@ -16,7 +16,9 @@
   ],
   "vars": {
     // Used for "This month" boundaries and default session names.
-    "CLUB_TIMEZONE": "Europe/London"
+    "CLUB_TIMEZONE": "Europe/London",
+    // www.<this> and *.workers.dev redirect here. Remove to serve every address as-is.
+    "CANONICAL_HOST": "chessmatess.com"
   },
   "observability": { "enabled": true }
   // ADMIN_PIN is a secret: set it in the Cloudflare dashboard (Settings → Variables and Secrets)

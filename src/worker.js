@@ -9,6 +9,14 @@ import { createClub } from './core.js';
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // One address for everyone: phones remember the club code and "who I am" per address,
+    // so www and the old workers.dev link redirect to the main domain (pages only, not API/WebSocket).
+    const canonical = env.CANONICAL_HOST;
+    if (canonical && url.hostname !== canonical && (url.hostname === `www.${canonical}` || url.hostname.endsWith('.workers.dev'))
+        && (request.method === 'GET' || request.method === 'HEAD') && !url.pathname.startsWith('/api/') && url.pathname !== '/ws') {
+      url.hostname = canonical; url.protocol = 'https:'; url.port = '';
+      return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname === '/') return Response.redirect(new URL('/display', url), 302);
     if (url.pathname === '/ws' || url.pathname.startsWith('/api/')) {
       return env.CLUB.get(env.CLUB.idFromName('club')).fetch(request);
