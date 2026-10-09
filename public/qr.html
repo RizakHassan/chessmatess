@@ -22,14 +22,15 @@
   ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0; margin: 30px 0 0; list-style: none; counter-reset: s; }
   li { counter-increment: s; font-size: 16px; line-height: 1.35; padding-top: 12px; border-top: 3px solid var(--orange); }
   li::before { content: counter(s); display: block; font: 600 14px var(--mono); color: var(--slate); margin-bottom: 4px; }
-  .print { margin-top: 32px; }
+  .print { margin-top: 20px; }
+  .note { margin: 28px 0 0; color: var(--text-2); font-size: 15px; max-width: 52ch; }
   .pin { margin-top: 30px; padding: 22px; background: var(--surface); border-radius: var(--r-container); box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); }
   .pin h2 { margin: 0 0 6px; font-size: 20px; }
   .pin p { margin: 0 0 14px; color: var(--text-2); }
   .pin .row { display: flex; gap: 8px; }
   .pin .input { flex: 1; min-width: 0; }
   @media print {
-    body::before, .print, .pin { display: none; }
+    body::before, .print, .pin, .note { display: none; }
     body { background: #fff; }
     .sheet { padding: 0; }
   }
@@ -56,6 +57,7 @@
     <div class="qr" id="qr"></div>
     <div class="url" id="url"></div>
     <ol><li>Pick white and black</li><li>Tap who won, or draw</li><li>Watch the board update</li></ol>
+    <p class="note">This code changes every time a new session starts. The projector shows the current one, so a printed sheet only works until the next session.</p>
     <button class="btn primary print" onclick="window.print()">Print this page</button>
   </div>
 </main>

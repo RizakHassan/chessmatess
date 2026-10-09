@@ -148,6 +148,20 @@
   .conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--up); }
   .conn.off i { background: var(--down); }
 
+  /* Join QR: only on screens that have the admin PIN saved, only on the Tonight tab */
+  .qrcard {
+    position: fixed; right: 32px; top: 50%; transform: translateY(-50%); width: 232px; z-index: 5;
+    background: var(--surface); border-radius: var(--r-container); padding: 18px 18px 16px;
+    box-shadow: 0 0 0 3px var(--slate) inset, 10px 10px 0 var(--sky); text-align: center; display: none;
+  }
+  .qrcard .qr svg { width: 100%; height: auto; display: block; }
+  .qrcard b { display: block; margin-top: 10px; font-size: 18px; letter-spacing: -0.01em; }
+  .qrcard span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  @media (min-width: 1000px) {
+    body.has-qr.tab-tonight:not(.clean) .qrcard { display: block; }
+    body.has-qr.tab-tonight:not(.clean) .wrap { max-width: none; margin: 0 300px 0 max(32px, calc(50vw - 900px)); }
+  }
+
   body.clean header, body.clean .meta, body.clean .conn { display: none; }
   body.clean .wrap { padding-top: 48px; }
 
@@ -210,9 +224,15 @@
     </article>
   </section>
 </main>
+<aside class="qrcard" id="qrcard" aria-label="Scan to log a game">
+  <div class="qr" id="qr"></div>
+  <b>Scan to log a game</b>
+  <span id="qrNote">Point your phone camera here</span>
+</aside>
 <div class="conn" id="conn"><i></i><span>Connecting</span></div>
 
 <script src="/live.js"></script>
+<script src="/vendor/qrcode.js"></script>
 <script>
 (() => {
   const params = new URLSearchParams(location.search);
@@ -234,6 +254,7 @@
     tab = t;
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + t));
+    document.body.classList.toggle('tab-tonight', t === 'tonight');
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
   document.addEventListener('keydown', e => {
@@ -324,17 +345,49 @@
     document.getElementById('monthGames').textContent = m.gameCount;
 
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
-      `<h3>No games yet tonight</h3><p>Scan the QR code at the club with your phone to log a result. The board updates as soon as one comes in.</p>`);
+      `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`);
     renderBoard(document.getElementById('board-month'), m.rows, 'month',
       `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`);
 
     for (const p of state.players) prevElo.set(p.id, p.elo);
+
+    refreshQr();
+    showHours(state.logging);
 
     const g = state.latest;
     if (g && lastGameId !== null && g.id > lastGameId) showTicker(g);
     lastGameId = g ? g.id : 0;
     firstRender = false;
   }
+
+  // The join QR carries the secret club code, which changes every session, so it is only
+  // fetched on a screen where the admin PIN has been saved (open /admin here once).
+  let adminPin = '';
+  try { adminPin = localStorage.getItem('adminPin') || ''; } catch {}
+  let qrOff = !adminPin, shownCode = null;
+  async function refreshQr() {
+    if (qrOff) return;
+    try {
+      const res = await fetch('/api/admin/club-code', { headers: { 'x-admin-pin': adminPin } });
+      if (!res.ok) { qrOff = true; document.body.classList.remove('has-qr'); return; } // wrong PIN: stop asking
+      const { code } = await res.json();
+      if (code !== shownCode) {
+        shownCode = code;
+        const qr = qrcode(0, 'M');
+        qr.addData(`${location.origin}/log?c=${encodeURIComponent(code)}`);
+        qr.make();
+        document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code to log a game' });
+      }
+      document.body.classList.add('has-qr');
+    } catch { /* offline: keep whatever is shown */ }
+  }
+
+  function showHours(lg) {
+    if (!lg) return;
+    document.getElementById('qrNote').textContent = lg.hours.always ? 'Point your phone camera here'
+      : lg.open ? `Logging open until ${lg.closes}` : `Logging opens ${lg.next || 'next club night'}`;
+  }
+  setInterval(() => fetch('/api/hours').then(r => r.json()).then(showHours).catch(() => {}), 60000);
 
   let tickerTimer;
   function showTicker(g) {

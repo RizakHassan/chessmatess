@@ -53,6 +53,19 @@ function monthStartUtc(year, month, timeZone) {
   return new Date(guess.getTime() - tzOffset(first, timeZone)); // re-check across a DST change
 }
 
+export const DEFAULT_HOURS = { always: false, days: [1], start: '18:00', end: '22:00' }; // Mondays 6pm–10pm
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const toMinutes = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };
+const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t));
+
+// Day of week (0 = Sunday) and minutes past midnight at `date` in `timeZone`.
+function localClock(date, timeZone) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', weekday: 'short', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(date).map(x => [x.type, x.value]));
+  return { day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), minutes: Number(p.hour) * 60 + Number(p.minute) };
+}
+
 const cleanName = name => String(name ?? '').trim().replace(/\s+/g, ' ');
 const cleanDevice = id => (/^[A-Za-z0-9-]{8,64}$/.test(String(id ?? '')) ? String(id) : null);
 
@@ -124,6 +137,55 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   const getSetting = key => one('SELECT value FROM settings WHERE key = ?', key)?.value ?? null;
   const setSetting = (key, value) =>
     sql.all('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, String(value));
+
+  /* ---------- logging hours ---------- */
+
+  function getHours() {
+    try { return { ...DEFAULT_HOURS, ...JSON.parse(getSetting('logging_hours') || '{}') }; } catch { return { ...DEFAULT_HOURS }; }
+  }
+
+  function setHours({ always, days, start, end }) {
+    const hours = {
+      always: !!always,
+      days: [...new Set((Array.isArray(days) ? days : []).map(Number))].filter(d => d >= 0 && d <= 6).sort(),
+      start: String(start), end: String(end),
+    };
+    if (!validTime(hours.start) || !validTime(hours.end)) throw new Error('Times must look like 18:00');
+    if (hours.start === hours.end) throw new Error('Start and end times must be different');
+    if (!hours.always && !hours.days.length) throw new Error('Pick at least one day, or choose Always open');
+    setSetting('logging_hours', JSON.stringify(hours));
+    return hours;
+  }
+
+  // Open/closed right now, plus a human label for the next opening, in the club's timezone.
+  // A window that ends before it starts (e.g. 20:00–01:00) runs past midnight.
+  function loggingStatus(at = clock()) {
+    const hours = getHours();
+    if (hours.always) return { open: true, hours };
+    const { day, minutes } = localClock(at, timeZone);
+    const start = toMinutes(hours.start), end = toMinutes(hours.end);
+    const overnight = end < start;
+    const open = overnight
+      ? (hours.days.includes(day) && minutes >= start) || (hours.days.includes((day + 6) % 7) && minutes < end)
+      : hours.days.includes(day) && minutes >= start && minutes < end;
+    let next = null;
+    if (!open) {
+      for (let offset = 0; offset <= 7; offset++) {
+        const d = (day + offset) % 7;
+        if (!hours.days.includes(d) || (offset === 0 && minutes >= start)) continue;
+        next = `${offset === 0 ? 'today' : offset === 1 ? 'tomorrow' : DAY_NAMES[d]} at ${hours.start}`;
+        break;
+      }
+    }
+    return { open, hours, next, closes: open ? hours.end : null };
+  }
+
+  function requireLoggingOpen() {
+    const status = loggingStatus();
+    if (!status.open) {
+      throw Object.assign(new Error(`Logging is closed. It opens ${status.next || 'at the next club night'}.`), { code: 'closed', status });
+    }
+  }
 
   /* ---------- sessions ---------- */
 
@@ -370,6 +432,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
       month: monthStandings(),
       players: listPlayers().map(p => ({ id: p.id, name: p.name, elo: Math.round(p.elo) })),
       latest: recentGames(1)[0] ?? null,
+      logging: loggingStatus(),
     };
   }
 
@@ -413,7 +476,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   }
 
   return {
-    getSetting, setSetting,
+    getSetting, setSetting, getHours, setHours, loggingStatus, requireLoggingOpen,
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,

@@ -19,7 +19,7 @@ You need a free Cloudflare account and this repo on GitHub.
 
 1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Keep the defaults: no build command, deploy command `npx wrangler deploy`, root `/`. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
 2. **Set the admin PIN.** Open the new Worker and go to **Settings → Variables and Secrets → Add**. Choose type **Secret**, name it `ADMIN_PIN`, and give it a value of at least 8 characters. Save it. Until this is set, admin is locked.
-3. **Open the app** at `https://chessmatess.<your-subdomain>.workers.dev/admin` and enter the PIN. Click **Print QR** and print the sheet for the club tables.
+3. **Open the app** at `https://chessmatess.<your-subdomain>.workers.dev/admin` on the laptop that drives the projector, and enter the PIN. That browser remembers the PIN, so `/display` on it shows the join QR code.
 
 From now on, **every push to `main` deploys automatically.** The database lives in the Durable Object, so deploys never touch your data.
 
@@ -40,11 +40,13 @@ This writes `chessmatess-export.json`. Upload it in **Admin → Backups → Rest
 
 ## On club night
 
-1. Open `/admin` and click **Start new session**. If you forget, the first logged game creates a session automatically. Players keep their Elo from week to week.
-2. Put `/display` on the projector and press `F11` for full screen.
-3. Put the printed QR sheets on the tables.
+1. Open `/admin` and click **Start new session**. This resets the Tonight board and **creates a new club code**, so last week's QR stops working. If you forget, the first logged game creates a session automatically, but the code stays the same.
+2. Put `/display` on the projector and press `F11` for full screen. The current QR code shows on the right of the **Tonight** tab. It only appears on a browser that has the admin PIN saved, and never on the **This month** tab or in clean mode, so Instagram screenshots don't leak it.
+3. Players scan the QR with their phone camera. Phones just need mobile data or any Wi-Fi.
 
-Phones just need mobile data or any Wi-Fi. Nothing has to be on the same network.
+**Logging hours.** Phones can only log games and add names during club hours. The default is Mondays 18:00–22:00 in the club's timezone. Change the days and times, or tick **Always open**, in **Admin → Logging hours**. Outside the hours, the phone page says when logging opens next, and the server refuses results too. Undo still works for its 60 seconds after closing.
+
+If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works until the next **Start new session**.
 
 ### Display tips
 
@@ -55,7 +57,8 @@ Phones just need mobile data or any Wi-Fi. Nothing has to be on the same network
 ## Security
 
 - **Admin PIN** (`ADMIN_PIN` secret). It protects `/admin`, `/qr` and the admin API. Each device remembers the PIN after you first enter it.
-- **Club code.** The QR link carries an 8-character code (`/log?c=…`), and each phone remembers it after one scan. People who only know the web address can see the leaderboard but can't log games or add names. If the code leaks, click **Change code** in admin and reprint the QR. Phones holding the old code are asked to scan again.
+- **Club code.** The QR link carries an 8-character code (`/log?c=…`), and each phone remembers it until the code changes. A new code is created every time you start a new session, and you can click **Change code** in admin at any time. Phones holding an old code are asked to scan the new QR. People who only know the web address can see the leaderboard but can't log games or add names.
+- **Logging hours.** Results are only accepted during the hours set in admin. This is checked on the server, not just in the page.
 - **Guessing protection.** Repeated wrong PINs or codes from one IP address are locked out for 15 minutes. PIN and club-code failures are counted separately. Everyone at the venue shares one IP address, so phones can never lock the admin out.
 
 ## Fair play

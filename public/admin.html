@@ -34,6 +34,17 @@
 
   .pin { max-width: 420px; margin: 8vh auto 0; }
   .code { font-size: 22px; letter-spacing: .12em; }
+  .days { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; margin: 0 0 12px; }
+  .days label { cursor: pointer; }
+  .days input { position: absolute; opacity: 0; pointer-events: none; }
+  .days span { display: inline-block; padding: 7px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; border: 1.5px solid var(--line-strong); color: var(--text-2); }
+  .days input:checked + span { background: var(--slate); border-color: var(--slate); color: var(--cream); }
+  .days input:focus-visible + span { outline: 3px solid var(--orange); outline-offset: 2px; }
+  .times { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .times .field { flex: 1; min-width: 7rem; }
+  .times .field span { font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .times .input { padding: 9px 10px; }
+  #hoursForm.always .days, #hoursForm.always .times .field { opacity: .4; pointer-events: none; }
 
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -101,7 +112,7 @@
     <div class="col">
       <section class="panel">
         <h2>Session</h2>
-        <p class="lead">Start a new session each Monday. The Tonight board shows only the current session. Elo carries over.</p>
+        <p class="lead">Start a new session each Monday. The Tonight board shows only the current session, and Elo carries over. Each new session also gets a new club code, so last week's QR stops working.</p>
         <div class="current" id="sessionInfo"><span class="muted">Loading…</span></div>
         <div class="inline">
           <input class="input" id="sessionLabel" placeholder="Label (optional)" aria-label="Session label">
@@ -120,8 +131,24 @@
       </section>
 
       <section class="panel">
+        <h2>Logging hours</h2>
+        <p class="lead">Phones can only log games (and add names) during these hours, in the club's timezone. Admin can still fix things at any time.</p>
+        <div class="current" id="hoursStatus"><span class="muted">Loading…</span></div>
+        <form id="hoursForm">
+          <label class="toggle" style="margin-bottom: 12px"><input type="checkbox" id="hoursAlways"> Always open</label>
+          <fieldset class="days" id="hoursDays" aria-label="Days"></fieldset>
+          <div class="times">
+            <label class="field"><span>From</span><input class="input" type="time" id="hoursStart" required></label>
+            <label class="field"><span>Until</span><input class="input" type="time" id="hoursEnd" required></label>
+            <button class="btn primary" type="submit">Save hours</button>
+          </div>
+          <p class="error-text" id="hoursErr" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="panel">
         <h2>Club code</h2>
-        <p class="lead">The QR code includes this code, so only people who scan it at the club can log games. If it leaks, change it and print a new QR. Phones that already scanned the old one will be asked to scan again.</p>
+        <p class="lead">The QR code includes this code, so only people who scan it at the club can log games. It changes automatically with every new session; you can also change it any time. The projector shows the current QR on the Tonight tab when this device has the admin PIN saved.</p>
         <div class="current"><b class="mono code" id="clubCode">········</b><a class="muted" id="logLink" href="/log" target="_blank">Open log page ↗</a></div>
         <div class="actions">
           <a class="btn primary" href="/qr" target="_blank">Print QR ↗</a>
@@ -237,6 +264,7 @@
     if (editing === null) renderPlayers(players);
     renderGames(games);
     renderCode((await api('GET', '/club-code')).code);
+    renderHours(await api('GET', '/hours'));
   }
 
   function renderSession(s) {
@@ -307,6 +335,52 @@
     toast(`Deleted ${removed} game${removed === 1 ? '' : 's'}. Elo recalculated.`);
     await load();
   }));
+
+  /* ---------- logging hours ---------- */
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const hoursForm = document.getElementById('hoursForm');
+  document.getElementById('hoursDays').innerHTML = [1, 2, 3, 4, 5, 6, 0]
+    .map(d => `<label><input type="checkbox" value="${d}"><span>${DAY_LABELS[d]}</span></label>`).join('');
+  let hoursDirty = false;
+  hoursForm.addEventListener('input', () => {
+    hoursDirty = true;
+    hoursForm.classList.toggle('always', document.getElementById('hoursAlways').checked);
+    document.getElementById('hoursErr').textContent = '';
+  });
+  function renderHours(status) {
+    document.getElementById('hoursStatus').innerHTML = status.hours.always
+      ? '<b>Open all the time</b>'
+      : status.open
+        ? `<b class="up">Open now</b><span class="muted">until ${esc(status.closes)}</span>`
+        : `<b>Closed</b><span class="muted">opens ${esc(status.next || 'never: pick a day')}</span>`;
+    if (hoursDirty) return; // don't overwrite what the admin is editing
+    const h = status.hours;
+    document.getElementById('hoursAlways').checked = h.always;
+    hoursForm.classList.toggle('always', h.always);
+    hoursForm.querySelectorAll('#hoursDays input').forEach(i => { i.checked = h.days.includes(Number(i.value)); });
+    document.getElementById('hoursStart').value = h.start;
+    document.getElementById('hoursEnd').value = h.end;
+  }
+  hoursForm.addEventListener('submit', run(async e => {
+    e.preventDefault();
+    const body = {
+      always: document.getElementById('hoursAlways').checked,
+      days: [...hoursForm.querySelectorAll('#hoursDays input:checked')].map(i => Number(i.value)),
+      start: document.getElementById('hoursStart').value,
+      end: document.getElementById('hoursEnd').value,
+    };
+    try {
+      const { status } = await api('PUT', '/hours', body);
+      hoursDirty = false;
+      renderHours(status);
+      toast('Logging hours saved');
+    } catch (err) {
+      if (err instanceof PinRequired) throw err;
+      document.getElementById('hoursErr').textContent = err.message;
+    }
+  }));
+  // The open/closed line changes with the clock, not with events.
+  setInterval(() => { if (!document.getElementById('app').hidden) api('GET', '/hours').then(renderHours).catch(() => {}); }, 60000);
 
   function renderCode(code) {
     document.getElementById('clubCode').textContent = code;
@@ -423,7 +497,7 @@
   document.getElementById('newSession').addEventListener('click', run(async e => {
     if (!armed(e.currentTarget)) return;
     const input = document.getElementById('sessionLabel');
-    await api('POST', '/sessions', { label: input.value }); input.value = ''; toast('New session started'); await load();
+    await api('POST', '/sessions', { label: input.value }); input.value = ''; toast('New session started with a new QR code'); await load();
   }));
 
   const addErr = document.getElementById('addErr');

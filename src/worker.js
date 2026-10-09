@@ -111,11 +111,20 @@ export class Club extends DurableObject {
     if (given && safeEqual(given, this.club.getSetting('club_code'))) return;
     // A phone remembering a recently replaced code is not a guess: don't count it.
     if (!given || this.retiredCodes().includes(given)) {
-      throw new HttpError(403, 'The club QR code has changed. Scan the new one at the club to log games.');
+      throw new HttpError(403, 'The club QR code has changed. Scan the new one on the projector to log games.');
     }
     this.checkLockout('code', ip);
     this.recordFail('code', ip);
-    throw new HttpError(403, 'This link has expired. Scan the QR code at the club to log games.');
+    throw new HttpError(403, 'This link has expired. Scan the QR code on the projector to log games.');
+  }
+
+  // New code for the QR; the previous few are remembered so phones holding them get a
+  // "scan the new one" message instead of counting as guesses.
+  rotateClubCode() {
+    const code = randomCode();
+    this.club.setSetting('retired_codes', JSON.stringify([this.club.getSetting('club_code'), ...this.retiredCodes()].slice(0, 5)));
+    this.club.setSetting('club_code', code);
+    return code;
   }
 
   retiredCodes() {
@@ -145,17 +154,20 @@ export class Club extends DurableObject {
     try {
       /* public */
       if (path === '/api/state' && method === 'GET') return json(club.snapshot());
+      if (path === '/api/hours' && method === 'GET') return json(club.loggingStatus());
       if (path === '/api/code/check' && method === 'POST') {
         this.requireClubCode(request);
         return json({ ok: true });
       }
       if (path === '/api/players' && method === 'POST') {
         this.requireClubCode(request);
+        club.requireLoggingOpen();
         const { name, force } = await body();
         return mutate(() => ({ player: club.addPlayer(name, { force: force === true }) }));
       }
       if (path === '/api/games' && method === 'POST') {
         this.requireClubCode(request);
+        club.requireLoggingOpen();
         const { p1, p2, result, allowDuplicate } = await body();
         const deviceId = request.headers.get('x-device-id');
         return mutate(() => ({ game: club.logGame(p1, p2, result, { deviceId, allowDuplicate: allowDuplicate === true }) }));
@@ -179,7 +191,11 @@ export class Club extends DurableObject {
         if (sub === '/players/merge' && method === 'POST') { const { keep, drop } = await body(); return mutate(() => club.mergePlayers(keep, drop)); }
         if (sub === '/games' && method === 'GET') return json(club.recentGames(Math.min(Number(url.searchParams.get('limit')) || 100, 1000)));
         if (sub === '/session' && method === 'GET') return json(club.currentSession());
-        if (sub === '/sessions' && method === 'POST') { const { label } = await body(); return mutate(() => ({ session: club.startSession(label) })); }
+        // Each new session gets a new club code, so last week's QR stops working.
+        if (sub === '/sessions' && method === 'POST') {
+          const { label } = await body();
+          return mutate(() => { const session = club.startSession(label); return { session, code: this.rotateClubCode() }; });
+        }
         if (sub === '/undo' && method === 'POST') return mutate(() => ({ undone: club.undoLastGame() }));
         if (sub === '/recalculate' && method === 'POST') return mutate(() => club.recalculate());
         if (idMatch?.[1] === 'players' && !idMatch[3] && method === 'PATCH') { const { name } = await body(); return mutate(() => club.renamePlayer(id, name)); }
@@ -190,13 +206,11 @@ export class Club extends DurableObject {
         const deviceMatch = sub.match(/^\/devices\/([A-Za-z0-9-]{8,64})\/games$/);
         if (deviceMatch && method === 'DELETE') return mutate(() => ({ removed: club.deleteGamesByDevice(deviceMatch[1]) }));
 
+        if (sub === '/hours' && method === 'GET') return json(club.loggingStatus());
+        if (sub === '/hours' && method === 'PUT') { const h = await body(); return mutate(() => ({ status: (club.setHours(h), club.loggingStatus()) })); }
+
         if (sub === '/club-code' && method === 'GET') return json({ code: club.getSetting('club_code') });
-        if (sub === '/club-code' && method === 'POST') {
-          const code = randomCode();
-          club.setSetting('retired_codes', JSON.stringify([club.getSetting('club_code'), ...this.retiredCodes()].slice(0, 5)));
-          club.setSetting('club_code', code);
-          return json({ ok: true, code });
-        }
+        if (sub === '/club-code' && method === 'POST') return mutate(() => ({ code: this.rotateClubCode() }));
         if (sub === '/export' && method === 'GET') {
           const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
           return json(club.exportData(), 200, { 'content-disposition': `attachment; filename="chessmatess-export-${stamp}.json"` });
@@ -210,6 +224,7 @@ export class Club extends DurableObject {
       return json({ ok: false, error: 'Not found' }, 404);
     } catch (err) {
       if (err instanceof HttpError) return json({ ok: false, error: err.message }, err.status);
+      if (err.code === 'closed') return json({ ok: false, closed: true, error: err.message, status: err.status }, 423);
       if (err.code === 'similar') {
         return json({ ok: false, similar: err.matches.map(p => ({ id: p.id, name: p.name })), exact: err.exact, error: err.message }, 409);
       }

@@ -85,6 +85,7 @@
     padding: 24px 20px; background: var(--surface); border-radius: var(--r-container);
     box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); border-top: 6px solid var(--orange);
   }
+  .locked.closed { border-top-color: var(--slate); }
   .locked h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
   .locked p { margin: 0; color: var(--text-2); }
 
@@ -117,7 +118,12 @@
 
   <section class="locked" id="locked" hidden>
     <h2>Scan the club QR code</h2>
-    <p id="lockedMsg">Logging games needs the QR code on the table at the club. Scan it with your phone camera and this page will open ready to go.</p>
+    <p id="lockedMsg">Logging games needs the club QR code. Scan the one on the projector with your phone camera and this page will open ready to go.</p>
+  </section>
+
+  <section class="locked closed" id="closed" hidden>
+    <h2>Logging is closed</h2>
+    <p id="closedMsg">Results can only be logged during club hours.</p>
   </section>
 
   <div id="form">
@@ -225,12 +231,37 @@
     } catch { throw new Error('Could not reach the leaderboard. Check your internet connection and try again.'); }
     const data = await res.json().catch(() => ({}));
     if (res.status === 403) { lock(data.error); throw new Error(data.error); }
+    if (res.status === 423) { applyHours(data.status); throw new Error(data.error); }
     if (!data.ok) throw Object.assign(new Error(data.error || 'That did not save. Try again.'), { data });
     return data;
   }
 
   if (!clubCode) lock();
   else post('/api/code/check', {}).catch(() => {});
+
+  /* ---------- club hours ---------- */
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function describeHours(h) {
+    const FULL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+    const days = h.days.length === 7 ? 'every day' : h.days.length === 1 ? `on ${FULL[h.days[0]]}` : `on ${h.days.map(d => DAYS[d]).join(', ')}`;
+    return `${days}, ${h.start}–${h.end}`;
+  }
+  let loggingOpen = true;
+  function applyHours(status) {
+    if (!status) return;
+    loggingOpen = status.open;
+    const closed = document.getElementById('closed');
+    document.getElementById('closedMsg').textContent =
+      `Results can be logged ${describeHours(status.hours)}. ${status.next ? `It opens ${status.next}.` : ''}`;
+    const isLocked = !document.getElementById('locked').hidden;
+    const isDone = document.getElementById('done').classList.contains('show');
+    closed.hidden = status.open || isLocked;
+    if (!isLocked && !isDone) document.getElementById('form').hidden = !status.open;
+    document.getElementById('lead').hidden = !status.open || isLocked;
+  }
+  // Opening and closing happen with no server event, so re-check every 30 seconds.
+  const checkHours = () => fetch('/api/hours').then(r => r.json()).then(applyHours).catch(() => {});
+  setInterval(checkHours, 30000);
 
   function setupCombo(key) {
     const root = document.getElementById(key);
@@ -374,7 +405,8 @@
     document.getElementById('c1')._select(null);
     document.getElementById('c2')._select(null);
     document.getElementById('done').classList.remove('show');
-    document.getElementById('form').hidden = false;
+    document.getElementById('form').hidden = !loggingOpen;
+    checkHours();
     window.scrollTo(0, 0);
   });
 
@@ -444,6 +476,7 @@
   });
 
   live(s => {
+    applyHours(s.logging);
     players = s.players;
     playersLoaded = true;
     renderMe();
