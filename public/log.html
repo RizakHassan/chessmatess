@@ -161,7 +161,7 @@
     </section>
 
     <section class="newbie">
-      <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <button class="link-btn" id="notMe" type="button">Not you?</button></p>
+      <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <a class="link-btn" id="myStats" href="/player">Your stats</a> · <button class="link-btn" id="notMe" type="button">Not you?</button></p>
       <p id="newLine">Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
       <form id="newForm" hidden novalidate>
         <div class="name-row">
@@ -437,7 +437,7 @@
     if (me && !p && playersLoaded) { me = null; meStore.set(null); } // removed or merged away
     document.getElementById('meLine').hidden = !p;
     document.getElementById('newLine').hidden = !!p || !newForm.hidden;
-    if (p) document.getElementById('meName').textContent = p.name;
+    if (p) { document.getElementById('meName').textContent = p.name; document.getElementById('myStats').href = `/player?id=${p.id}`; }
   }
   function setMe(id) { me = id; meStore.set(id); renderMe(); }
   function closeNewForm() {

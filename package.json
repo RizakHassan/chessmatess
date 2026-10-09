@@ -4,6 +4,7 @@
   "description": "Live Elo leaderboard for a weekly chess club",
   "main": "src/worker.js",
   "scripts": {
+    "build": "npm test",
     "dev": "wrangler dev --ip 0.0.0.0",
     "deploy": "wrangler deploy",
     "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js",

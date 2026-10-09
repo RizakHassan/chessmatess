@@ -198,6 +198,8 @@ export class Club extends DurableObject {
       const sessionMatch = path.match(/^\/api\/sessions\/(\d+)$/);
       if (sessionMatch && method === 'GET') return json(club.sessionStandings(Number(sessionMatch[1])));
       if (path === '/api/months' && method === 'GET') return json(club.listMonths());
+      const playerMatch = path.match(/^\/api\/players\/(\d+)$/);
+      if (playerMatch && method === 'GET') return json(club.playerStats(Number(playerMatch[1])));
       const monthMatch = path.match(/^\/api\/months\/(\d{4}-\d{2})$/);
       if (monthMatch && method === 'GET') return json(club.monthStandingsFor(monthMatch[1]));
       if (path === '/api/code/check' && method === 'POST') {

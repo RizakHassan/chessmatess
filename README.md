@@ -17,7 +17,7 @@ It runs on **Cloudflare** with nothing to keep switched on. A Worker serves the 
 
 You need a free Cloudflare account and this repo on GitHub.
 
-1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Use build command `npm test`, deploy command `npx wrangler deploy`, root `/`. With `npm test` as the build command, a push with failing tests stops instead of going live. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
+1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Use build command `npm run build` (it runs the tests), deploy command `npx wrangler deploy`, root `/`. With that build command, a push with failing tests stops instead of going live. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
 2. **Set the admin PIN.** Open the new Worker and go to **Settings → Variables and Secrets → Add**. Choose type **Secret**, name it `ADMIN_PIN`, and give it a value of at least 8 characters. Save it. Until this is set, admin is locked.
 3. **Open the app** at `https://chessmatess.com/admin` on the laptop that drives the projector, and enter the PIN. That browser remembers the PIN, so `/display` on it shows the join QR code.
 
@@ -53,6 +53,7 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 ### Display tips
 
 - **Club nights won (♚):** the #1 of each finished club night (most wins, Elo as tiebreak) earns a title, shown as a ♚ count next to their name on both boards and as a column in the Excel download. A night counts once logging has closed or the next session has started, and needs at least one win. Past weeks show the count as it stood then.
+- **Player pages:** tap any name on the leaderboard, in admin or under "Your stats" on the phone page. You get `/player?id=N` with current Elo and rank, nights won, record and score %, peak Elo, current streak, best win, a rating-over-time chart (hover or arrow keys for each game), head-to-head against every opponent and the full game list.
 - **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, or the ← / → keys. Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
 - **Share a specific week or month:** `/display?session=12` or `/display?month=2026-09`. Add `&clean` for an Instagram-ready card. The arrows are hidden in clean mode.
 
@@ -127,6 +128,7 @@ public/display.html  Projector leaderboard (FLIP slide animations, glow flashes)
 public/log.html      Mobile result logger
 public/admin.html    Admin tools
 public/qr.html       Printable QR sheet
+public/player.html   Player stats page with rating chart
 public/style.css     Shared design tokens from the logo palette
 public/fonts/        Self-hosted Geist + Geist Mono (OFL)
 public/vendor/       qrcode-generator (MIT)

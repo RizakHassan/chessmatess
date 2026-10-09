@@ -65,6 +65,8 @@
   tr.removed td:not(.act) { opacity: .45; }
   .scroll { max-height: 640px; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
   .name-input { padding: 6px 10px; font-size: 15px; }
+  a.plink { color: inherit; text-decoration: none; }
+  a.plink:hover { color: var(--slate); text-decoration: underline; }
   .merge-label { font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
   .merge-select { width: 100%; min-width: 12rem; }
   td.name-cell { min-width: 8rem; }
@@ -292,7 +294,7 @@
     const rows = players.filter(p => p.active || showRemoved).sort((a, b) => b.active - a.active || b.elo - a.elo);
     document.getElementById('players').innerHTML = rows.map(p => `
       <tr data-id="${p.id}" data-name="${esc(p.name)}" class="${p.active ? '' : 'removed'}">
-        <td class="name-cell">${esc(p.name)}</td>
+        <td class="name-cell"><a class="plink" href="/player?id=${p.id}" target="_blank">${esc(p.name)}</a></td>
         <td class="num">${Math.round(p.elo)}</td>
         <td class="act">${p.active
           ? `<button class="btn ghost small" data-act="rename">Rename</button><button class="btn ghost small" data-act="merge" title="Same person entered twice? Move their games onto the other entry">Merge…</button><button class="btn danger small" data-act="remove" data-confirm="Remove?">Remove</button>`

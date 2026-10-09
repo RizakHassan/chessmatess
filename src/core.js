@@ -560,6 +560,73 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
 
   const withTitles = (rows, counts) => rows.map(r => ({ ...r, titles: counts.get(r.id) || 0 }));
 
+  /* ---------- player stats ---------- */
+
+  // Everything for one player's page, rebuilt from the stored Elo changes in game order.
+  function playerStats(id) {
+    const player = one('SELECT id, name, elo, active, created_at FROM players WHERE id = ?', Number(id));
+    if (!player) throw new Error('Player not found');
+    const names = new Map(sql.all('SELECT id, name FROM players').map(p => [p.id, p.name]));
+    const games = sql.all(`SELECT g.*, s.label AS session_label FROM games g JOIN sessions s ON s.id = g.session_id
+                           ORDER BY g.created_at, g.id`);
+    const ratings = new Map();
+    const at = pid => ratings.get(pid) ?? START_ELO;
+    const history = [];
+    for (const g of games) {
+      const r1 = at(g.p1_id), r2 = at(g.p2_id);
+      ratings.set(g.p1_id, r1 + g.p1_delta);
+      ratings.set(g.p2_id, r2 + g.p2_delta);
+      if (g.p1_id !== player.id && g.p2_id !== player.id) continue;
+      const white = g.p1_id === player.id;
+      const score = white ? g.result : 1 - g.result;
+      const oppId = white ? g.p2_id : g.p1_id;
+      const before = white ? r1 : r2;
+      const delta = white ? g.p1_delta : g.p2_delta;
+      history.push({
+        id: g.id, at: g.created_at, session_id: g.session_id, session_label: g.session_label,
+        color: white ? 'white' : 'black', score, opponent_id: oppId, opponent: names.get(oppId) ?? '?',
+        opponent_elo: Math.round(white ? r2 : r1), elo_before: Math.round(before),
+        elo: Math.round(before + delta), delta: Math.round(delta),
+      });
+    }
+
+    const w = history.filter(h => h.score === 1).length, d = history.filter(h => h.score === 0.5).length;
+    const l = history.length - w - d;
+    let peak = { elo: START_ELO, at: player.created_at }, low = { elo: START_ELO, at: player.created_at };
+    for (const h of history) { if (h.elo > peak.elo) peak = { elo: h.elo, at: h.at }; if (h.elo < low.elo) low = { elo: h.elo, at: h.at }; }
+    // Current streak: consecutive identical results counted back from the latest game.
+    let streak = null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const kind = history[i].score === 1 ? 'W' : history[i].score === 0 ? 'L' : 'D';
+      if (!streak) streak = { kind, count: 1 };
+      else if (streak.kind === kind) streak.count++;
+      else break;
+    }
+    // Best win: beating the highest-rated opponent (rating at the time).
+    const bestWin = history.filter(h => h.score === 1).sort((a, b) => b.opponent_elo - a.opponent_elo || a.at.localeCompare(b.at))[0] || null;
+
+    const h2h = new Map();
+    for (const h of history) {
+      const e = h2h.get(h.opponent_id) || { opponent_id: h.opponent_id, name: h.opponent, games: 0, w: 0, d: 0, l: 0 };
+      e.games++; if (h.score === 1) e.w++; else if (h.score === 0) e.l++; else e.d++;
+      h2h.set(h.opponent_id, e);
+    }
+    const ranked = sql.all('SELECT id FROM players WHERE active = 1 ORDER BY elo DESC');
+    const rank = player.active ? ranked.findIndex(p => p.id === player.id) + 1 : null;
+    const nights = nightWinners().filter(x => x.player_id === player.id).map(x => x.session_id);
+    const nightLabels = nights.length ? sql.all(`SELECT id, label FROM sessions WHERE id IN (${nights.map(() => '?').join(',')}) ORDER BY id DESC`, ...nights) : [];
+
+    return {
+      player: { id: player.id, name: player.name, elo: Math.round(player.elo), active: !!player.active, joined: player.created_at },
+      rank, of: ranked.length, games: history.length, w, d, l,
+      score_pct: history.length ? Math.round(((w + d / 2) / history.length) * 100) : null,
+      peak, low, streak, best_win: bestWin && { opponent: bestWin.opponent, opponent_elo: bestWin.opponent_elo, at: bestWin.at, session_label: bestWin.session_label },
+      nights_won: nightLabels,
+      head_to_head: [...h2h.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name)),
+      history,
+    };
+  }
+
   function listSessions() {
     const current = currentSession();
     return sql.all(`SELECT s.id, s.label, s.created_at, COUNT(g.id) AS games
@@ -750,7 +817,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
-    tonightStandings, monthStandings, snapshot, nightWinners, listSessions, sessionStandings, listMonths, monthStandingsFor,
+    tonightStandings, monthStandings, snapshot, nightWinners, playerStats, listSessions, sessionStandings, listMonths, monthStandingsFor,
     exportData, importData, spreadsheetSheets,
   };
 }
