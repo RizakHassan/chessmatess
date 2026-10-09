@@ -50,7 +50,16 @@
     will-change: transform;
   }
   .row .rank { font-family: var(--mono); font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .row .name { font-weight: 650; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .name { font-weight: 650; letter-spacing: -0.015em; display: flex; align-items: center; gap: .45em; min-width: 0; }
+  .row .name .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* club nights won */
+  .titles {
+    flex: none; display: inline-flex; align-items: center; gap: .15em; padding: .12em .5em; border-radius: 999px;
+    font: 700 .6em var(--mono); color: var(--orange); background: rgba(254, 80, 45, .1); letter-spacing: 0;
+  }
+  .titles .k { font-family: "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif; font-size: 1.25em; line-height: 1; }
+  .row.p1 .titles { color: #ffb199; background: rgba(255, 252, 240, .12); }
+  .legend-k { font-family: "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif; color: var(--orange); }
   .row .wdl { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; }
   .row .wdl b { color: var(--text); font-weight: 700; }
   .row .elo { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; transition: color 1.8s; }
@@ -244,7 +253,7 @@
       <div class="board" id="board-month"></div>
       <div class="card-foot">
         <span class="who"><img class="logo" src="/logo.png" alt=""><span class="wordmark">Chessmatess</span></span>
-        <span>Monday nights · all levels welcome</span>
+        <span id="cardFoot">Monday nights · all levels welcome</span>
       </div>
     </article>
   </section>
@@ -295,16 +304,21 @@
     document.getElementById(id).innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton skeleton-row"></div>').join('');
   }
 
+  const KING = '♚&#xFE0E;';
+  const nameCell = r => `<span class="nm">${esc(r.name)}</span>${r.titles
+    ? `<span class="titles" title="Won ${r.titles} club night${r.titles === 1 ? '' : 's'}"><span class="k">${KING}</span>${r.titles}</span>` : ''}`;
+  const legend = rows => rows.some(r => r.titles) ? ` · <span class="legend-k">${KING}</span> club nights won` : '';
+
   const rowHtml = {
     tonight: (r, i) => `
       <div class="rank">${i + 1}</div>
-      <div class="name">${esc(r.name)}</div>
+      <div class="name">${nameCell(r)}</div>
       <div class="wdl c">${wdl(r)}</div>
       <div class="elo r">${r.elo}</div>
       <div class="chip-cell r">${chip(r.delta)}</div>`,
     month: (r, i) => `
       <div class="rank">${i + 1}</div>
-      <div class="name">${esc(r.name)}</div>
+      <div class="name">${nameCell(r)}</div>
       <div class="elo r">${r.elo}</div>
       <div class="wdl c">${wdl(r)}</div>
       <div class="chip-cell r">${chip(r.delta)}</div>`,
@@ -421,7 +435,7 @@
     const n = t.gameCount;
     document.getElementById('tonightMeta').textContent = n ? `${n} game${n === 1 ? '' : 's'} played${past ? ' that night' : ''}` : '';
     document.getElementById('colNight').textContent = past ? 'That night' : 'Tonight';
-    document.getElementById('rankRule').textContent = `Most wins ${past ? 'that night' : 'tonight'}, Elo breaks ties`;
+    document.getElementById('rankRule').innerHTML = `Most wins ${past ? 'that night' : 'tonight'}, Elo breaks ties${legend(t.rows)}`;
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
       `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`,
       { quiet });
@@ -431,6 +445,8 @@
     document.getElementById('monthTitle').innerHTML = `${esc(monthName)} <span>${esc(year || '')}</span>`;
     document.getElementById('monthPlayers').textContent = m.rows.length;
     document.getElementById('monthGames').textContent = m.gameCount;
+    document.getElementById('cardFoot').innerHTML = m.rows.some(r => r.titles)
+      ? `<span class="legend-k">${KING}</span> club nights won · Monday nights` : 'Monday nights · all levels welcome';
     renderBoard(document.getElementById('board-month'), m.rows, 'month',
       `<h3>No games this month</h3><p>Results from every Monday this month will show up here.</p>`, { quiet });
   }

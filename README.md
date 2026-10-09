@@ -52,6 +52,7 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 
 ### Display tips
 
+- **Club nights won (♚):** the #1 of each finished club night (most wins, Elo as tiebreak) earns a title, shown as a ♚ count next to their name on both boards and as a column in the Excel download. A night counts once logging has closed or the next session has started, and needs at least one win. Past weeks show the count as it stood then.
 - **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, or the ← / → keys. Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
 - **Share a specific week or month:** `/display?session=12` or `/display?month=2026-09`. Add `&clean` for an Instagram-ready card. The arrows are hidden in clean mode.
 

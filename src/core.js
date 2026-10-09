@@ -485,7 +485,8 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const session = currentSession();
     if (!session) return { session: null, rows: [], gameCount: 0 };
     const games = sql.all('SELECT * FROM games WHERE session_id = ?', session.id);
-    const rows = withPlayers(tally(games)).sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
+    const rows = withTitles(withPlayers(tally(games)), nightTitles())
+      .sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
     return { session, rows, gameCount: games.length };
   }
 
@@ -501,7 +502,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const start = monthStartUtc(year, month, timeZone);
     const end = monthStartUtc(month === 11 ? year + 1 : year, (month + 1) % 12, timeZone);
     const games = sql.all('SELECT * FROM games WHERE created_at >= ? AND created_at < ?', start.toISOString(), end.toISOString());
-    const rows = withPlayers(tally(games)).sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
+    const rows = withTitles(withPlayers(tally(games)), nightTitles()).sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
     const label = new Date(Date.UTC(year, month, 15)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });
     return { key: `${year}-${String(month + 1).padStart(2, '0')}`, label, rows, gameCount: games.length };
   }
@@ -528,6 +529,37 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     }));
   }
 
+  /* ---------- club nights won ---------- */
+
+  // The #1 of each finished club night (most wins, then Elo at the end of the night).
+  // A night is finished once a newer session exists or logging has closed; a winner needs at least one win.
+  let winnersCache = { key: null, value: [] };
+  function nightWinners() {
+    const current = currentSession();
+    const tonightOver = !loggingStatus().open;
+    // Only recompute when games, sessions or open/closed change (this runs on every leaderboard update).
+    const g = one('SELECT COUNT(*) AS n, MAX(id) AS max, TOTAL(p1_delta) + 3 * TOTAL(p2_delta) AS sig FROM games');
+    const key = `${g.n}|${g.max}|${g.sig}|${current?.id}|${tonightOver}`;
+    if (winnersCache.key === key) return winnersCache.value;
+    const winners = [];
+    for (const s of sql.all('SELECT s.id FROM sessions s WHERE EXISTS (SELECT 1 FROM games g WHERE g.session_id = s.id) ORDER BY s.id')) {
+      if (current && s.id === current.id && !tonightOver) continue;
+      const games = sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', s.id);
+      const [top] = historicRows(games).sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
+      if (top && top.w > 0) winners.push({ session_id: s.id, player_id: top.id, ended_at: games[games.length - 1].created_at });
+    }
+    winnersCache = { key, value: winners };
+    return winners;
+  }
+
+  function nightTitles(filter = () => true) {
+    const counts = new Map();
+    for (const w of nightWinners()) if (filter(w)) counts.set(w.player_id, (counts.get(w.player_id) || 0) + 1);
+    return counts;
+  }
+
+  const withTitles = (rows, counts) => rows.map(r => ({ ...r, titles: counts.get(r.id) || 0 }));
+
   function listSessions() {
     const current = currentSession();
     return sql.all(`SELECT s.id, s.label, s.created_at, COUNT(g.id) AS games
@@ -543,7 +575,8 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const current = currentSession();
     if (current && current.id === session.id) return { ...tonightStandings(), current: true };
     const games = sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', session.id);
-    const rows = historicRows(games).sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
+    const rows = withTitles(historicRows(games), nightTitles(w => w.session_id <= session.id))
+      .sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
     return { session, rows, gameCount: games.length, current: false };
   }
 
@@ -564,7 +597,8 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const start = monthStartUtc(year, month - 1, timeZone);
     const end = monthStartUtc(month === 12 ? year + 1 : year, month % 12, timeZone);
     const games = sql.all('SELECT * FROM games WHERE created_at >= ? AND created_at < ? ORDER BY created_at, id', start.toISOString(), end.toISOString());
-    const rows = historicRows(games).sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
+    const rows = withTitles(historicRows(games), nightTitles(w => w.ended_at < end.toISOString()))
+      .sort((x, y) => y.elo - x.elo || x.name.localeCompare(y.name));
     const label = new Date(Date.UTC(year, month - 1, 15)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });
     return { key, label, rows, gameCount: games.length, current: false };
   }
@@ -623,6 +657,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const stats = tally(games);
     const ranked = players.filter(p => p.active).sort((a, b) => b.elo - a.elo);
     const rankOf = new Map(ranked.map((p, i) => [p.id, i + 1]));
+    const titles = nightTitles();
     const resultText = r => (r === 1 ? '1–0' : r === 0 ? '0–1' : '½–½');
     const sessionGames = new Map();
     for (const g of games) {
@@ -636,11 +671,12 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
         columns: [
           { header: 'Rank', width: 7, type: 'int' }, { header: 'Name', width: 24 }, { header: 'Elo', width: 8, type: 'int' },
           { header: 'Games', width: 8, type: 'int' }, { header: 'Wins', width: 7, type: 'int' }, { header: 'Draws', width: 7, type: 'int' },
-          { header: 'Losses', width: 8, type: 'int' }, { header: 'Status', width: 10 }, { header: 'Joined', width: 17, type: 'date' },
+          { header: 'Losses', width: 8, type: 'int' }, { header: 'Nights won', width: 11, type: 'int' },
+          { header: 'Status', width: 10 }, { header: 'Joined', width: 17, type: 'date' },
         ],
         rows: [...players].sort((a, b) => b.active - a.active || b.elo - a.elo).map(p => {
           const t = stats.get(p.id) || { games: 0, w: 0, d: 0, l: 0 };
-          return [rankOf.get(p.id) ?? null, p.name, Math.round(p.elo), t.games, t.w, t.d, t.l, p.active ? 'Active' : 'Removed', localDate(p.created_at)];
+          return [rankOf.get(p.id) ?? null, p.name, Math.round(p.elo), t.games, t.w, t.d, t.l, titles.get(p.id) || 0, p.active ? 'Active' : 'Removed', localDate(p.created_at)];
         }),
       },
       {
@@ -714,7 +750,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
-    tonightStandings, monthStandings, snapshot, listSessions, sessionStandings, listMonths, monthStandingsFor,
+    tonightStandings, monthStandings, snapshot, nightWinners, listSessions, sessionStandings, listMonths, monthStandingsFor,
     exportData, importData, spreadsheetSheets,
   };
 }

@@ -19,7 +19,7 @@ function sampleClub() {
 
 test('spreadsheet sheets have readable rows with club-time dates', () => {
   const [players, games, sessions] = sampleClub().spreadsheetSheets();
-  assert.deepStrictEqual(players.rows.map(r => r.slice(1, 8)), [
+  assert.deepStrictEqual(players.rows.map(r => [...r.slice(1, 7), r[8]]), [
     ['Amara Okafor', 1016, 1, 1, 0, 0, 'Active'],
     ['Priya <Raman> & Co', 985, 2, 0, 1, 1, 'Active'],
     ['Kenji Mori', 999, 1, 0, 1, 0, 'Removed'],
