@@ -17,9 +17,9 @@ It runs on **Cloudflare** with nothing to keep switched on. A Worker serves the 
 
 You need a free Cloudflare account and this repo on GitHub.
 
-1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Keep the defaults: no build command, deploy command `npx wrangler deploy`, root `/`. The Worker name must be **`chessmates`** to match `wrangler.jsonc`. Click **Deploy**.
+1. **Connect the repo.** In the [Cloudflare dashboard](https://dash.cloudflare.com), go to **Workers & Pages → Create → Import a repository**, then pick this GitHub repo. Keep the defaults: no build command, deploy command `npx wrangler deploy`, root `/`. The Worker name must match `name` in `wrangler.jsonc` (**`chessmatess`**). Click **Deploy**.
 2. **Set the admin PIN.** Open the new Worker and go to **Settings → Variables and Secrets → Add**. Choose type **Secret**, name it `ADMIN_PIN`, and give it a value of at least 8 characters. Save it. Until this is set, admin is locked.
-3. **Open the app** at `https://chessmates.<your-subdomain>.workers.dev/admin` and enter the PIN. Click **Print QR** and print the sheet for the club tables.
+3. **Open the app** at `https://chessmatess.<your-subdomain>.workers.dev/admin` and enter the PIN. Click **Print QR** and print the sheet for the club tables.
 
 From now on, **every push to `main` deploys automatically.** The database lives in the Durable Object, so deploys never touch your data.
 
