@@ -121,3 +121,27 @@ test("players who have played each other can't be merged", () => {
   assert.throws(() => club.mergePlayers(x.id, y.id), /played each other/);
   assert.throws(() => club.mergePlayers(x.id, x.id), /two different/);
 });
+
+test('self-added names are first name + last initial, tidied up', async () => {
+  const { personName } = await import('../src/core.js');
+  assert.strictEqual(personName('rizak', 'h'), 'Rizak H');
+  assert.strictEqual(personName('  mary-jane ', 'o.'), 'Mary-Jane O');
+  assert.strictEqual(personName('lucía', 'Ó'), 'Lucía Ó');
+  assert.strictEqual(personName('Sam', 'WH'), 'Sam Wh');            // extra letters to tell two Sam Ws apart
+  assert.strictEqual(personName("d'arcy", 'm'), "D'arcy M");
+  assert.throws(() => personName('', 'h'), /first name/);
+  assert.throws(() => personName('Rizak', ''), /last name/);
+  assert.throws(() => personName('Rizak', 'Hassan'), /last name/);   // a whole surname isn't an initial
+  assert.throws(() => personName('R1zak', 'h'), /letters/);
+  assert.throws(() => personName('<b>', 'h'), /letters/);
+});
+
+test('"Rizak H" still triggers "Is this you?" against an existing "Rizak"', async () => {
+  const { personName } = await import('../src/core.js');
+  const { club } = memoryClub();
+  club.addPlayer('Rizak');
+  assert.throws(() => club.addPlayer(personName('rizak', 'h')), e => e.code === 'similar' && e.matches[0].name === 'Rizak');
+  club.addPlayer('Sam W');
+  assert.throws(() => club.addPlayer(personName('sam', 'w')), e => e.exact === true);
+  assert.strictEqual(club.addPlayer(personName('sam', 'wh'), { force: true }).name, 'Sam Wh');
+});

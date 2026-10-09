@@ -98,6 +98,19 @@ const cleanDevice = id => (/^[A-Za-z0-9-]{8,64}$/.test(String(id ?? '')) ? Strin
 export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000; // same pairing + result this soon is probably logged twice
 export const SELF_UNDO_MS = 75 * 1000;             // phone shows 60s; a little grace for slow networks
 
+// Self-added players give a first name plus last-name initial: ("rizak", "h") -> "Rizak H".
+// Up to three letters are allowed after the space so two "Sam W"s can become "Sam W" and "Sam Wh".
+export function personName(first, initial) {
+  first = String(first ?? '').trim().replace(/\s+/g, ' ');
+  initial = String(initial ?? '').replace(/[\s.]/g, '');
+  if (!first) throw new Error('Enter your first name');
+  if (first.length > 30 || !/^\p{L}[\p{L}'’\- ]*$/u.test(first)) throw new Error('First name can only use letters, spaces, hyphens and apostrophes');
+  if (!/^\p{L}{1,3}$/u.test(initial)) throw new Error('Enter the first letter of your last name');
+  const cap = w => w.charAt(0).toLocaleUpperCase('en-GB') + w.slice(1);
+  first = first.split(' ').map(w => w.split('-').map(cap).join('-')).join(' ');
+  return `${first} ${cap(initial.toLocaleLowerCase('en-GB'))}`;
+}
+
 // Thrown when a new name looks like someone already on the list; the phone can pick them or confirm.
 export class SimilarNameError extends Error {
   constructor(matches, exact = false) {

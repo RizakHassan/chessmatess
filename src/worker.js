@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { createClub } from './core.js';
+import { createClub, personName } from './core.js';
 import { buildXlsx } from './xlsx.js';
 
 /*
@@ -200,7 +200,15 @@ export class Club extends DurableObject {
       if (path === '/api/players' && method === 'POST') {
         this.requireClubCode(request);
         club.requireLoggingOpen();
-        const { name, force } = await body();
+        const { first, initial, name: legacy, force } = await body();
+        let name;
+        if (first !== undefined) name = personName(first, initial);
+        else {
+          // A page loaded before this change sends one "name" field: accept "First L", otherwise ask for the initial.
+          const m = String(legacy ?? '').trim().match(/^(.*\S)\s+(\p{L}{1,3})\.?$/u);
+          if (!m) throw new Error('Please add the first letter of your last name (refresh the page if you only see one box).');
+          name = personName(m[1], m[2]);
+        }
         return mutate(() => ({ player: club.addPlayer(name, { force: force === true }) }));
       }
       if (path === '/api/games' && method === 'POST') {

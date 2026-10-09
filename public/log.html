@@ -74,6 +74,12 @@
   .newbie form { display: grid; gap: 8px; margin-top: 12px; }
   .newbie .row { display: flex; gap: 8px; }
   .newbie .row .input { flex: 1; min-width: 0; }
+  .name-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem auto; gap: 8px; align-items: end; }
+  .name-row .field span { font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .name-row .initial .input { text-align: center; text-transform: uppercase; }
+  .name-row .btn { padding: 12px 16px; }
+  .name-hint { margin: 0; font-size: 13px; color: var(--muted); }
+  .newbie .error-text { color: var(--down); }
   .similar { padding: 14px; border-radius: var(--r-row); background: var(--surface); box-shadow: 0 0 0 1.5px var(--orange) inset; }
   .similar p { margin: 0 0 10px; color: var(--text); font-weight: 600; }
   .similar .pick { display: flex; flex-direction: column; gap: 6px; }
@@ -157,11 +163,15 @@
     <section class="newbie">
       <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <button class="link-btn" id="notMe" type="button">Not you?</button></p>
       <p id="newLine">Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
-      <form id="newForm" hidden>
-        <div class="row">
-          <input class="input" id="newName" placeholder="First and last name" maxlength="40" autocapitalize="words" aria-label="Your name" required>
+      <form id="newForm" hidden novalidate>
+        <div class="name-row">
+          <label class="field"><span>First name</span>
+            <input class="input" id="newFirst" maxlength="30" autocapitalize="words" autocomplete="given-name" required></label>
+          <label class="field initial"><span>Last initial</span>
+            <input class="input" id="newInitial" maxlength="3" autocapitalize="characters" autocomplete="off" required></label>
           <button class="btn primary" type="submit">Add</button>
         </div>
+        <p class="name-hint">Just the first letter of your last name, so people with the same first name can be told apart.</p>
         <p class="error-text" id="newErr" aria-live="polite"></p>
         <div class="similar" id="similar" hidden></div>
       </form>
@@ -419,7 +429,7 @@
   let me = meStore.get();
   let playersLoaded = false;
   const newBtn = document.getElementById('newBtn'), newForm = document.getElementById('newForm');
-  const newName = document.getElementById('newName'), newErr = document.getElementById('newErr');
+  const newFirst = document.getElementById('newFirst'), newInitial = document.getElementById('newInitial'), newErr = document.getElementById('newErr');
   const similarBox = document.getElementById('similar');
 
   function renderMe() {
@@ -431,7 +441,7 @@
   }
   function setMe(id) { me = id; meStore.set(id); renderMe(); }
   function closeNewForm() {
-    newName.value = ''; newErr.textContent = ''; similarBox.hidden = true; newForm.hidden = true; renderMe();
+    newFirst.value = ''; newInitial.value = ''; newErr.textContent = ''; similarBox.hidden = true; newForm.hidden = true; renderMe();
   }
   function useAsMe(id, welcome) {
     setMe(id);
@@ -443,25 +453,32 @@
 
   document.getElementById('notMe').addEventListener('click', () => {
     setMe(null);
-    newForm.hidden = false; document.getElementById('newLine').hidden = true; newName.focus();
+    newForm.hidden = false; document.getElementById('newLine').hidden = true; newFirst.focus();
   });
-  newBtn.addEventListener('click', () => { newForm.hidden = false; document.getElementById('newLine').hidden = true; newName.focus(); });
-  newName.addEventListener('input', () => { newErr.textContent = ''; similarBox.hidden = true; });
+  newBtn.addEventListener('click', () => { newForm.hidden = false; document.getElementById('newLine').hidden = true; newFirst.focus(); });
+  for (const el of [newFirst, newInitial]) el.addEventListener('input', () => { newErr.textContent = ''; similarBox.hidden = true; });
 
   async function addName(force) {
-    if (!newName.value.trim()) { newErr.textContent = 'Enter your name first.'; return; }
+    if (!newFirst.value.trim()) { newErr.textContent = 'Enter your first name.'; newFirst.focus(); return; }
+    if (!newInitial.value.trim()) { newErr.textContent = 'Enter the first letter of your last name.'; newInitial.focus(); return; }
     try {
-      const { player } = await post('/api/players', { name: newName.value, force });
+      const { player } = await post('/api/players', { first: newFirst.value, initial: newInitial.value, force });
       players.push({ id: player.id, name: player.name, elo: Math.round(player.elo) });
       useAsMe(player.id, `Welcome, ${player.name}. You start at 1000.`);
     } catch (err) {
       const similar = err.data?.similar;
       if (!similar) { newErr.textContent = err.message; return; }
       // Close matches: let them pick themselves instead of creating a second entry.
-      const typed = newName.value.trim();
+      // Same tidying as the server: capitalised first name, initial like "H" or "Wh".
+      const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+      const ini = newInitial.value.replace(/[\s.]/g, '');
+      const first = newFirst.value.trim().replace(/\s+/g, ' ').split(' ').map(w => w.split('-').map(cap).join('-')).join(' ');
+      const typed = `${first} ${cap(ini.toLowerCase())}`;
       similarBox.innerHTML = `<p>${err.data.exact ? 'That name is already on the list. Is it you?' : 'Is one of these you?'}</p>
         <div class="pick">${similar.map(m => `<button type="button" class="btn" data-me="${m.id}">${esc(m.name)}<small>That's me</small></button>`).join('')}</div>
-        ${err.data.exact ? '' : `<button type="button" class="link-btn" id="forceNew">No, I'm new: add “${esc(typed)}”</button>`}`;
+        ${err.data.exact
+          ? `<p class="name-hint" style="margin-top:10px">Not you? Add another letter of your last name, like “${esc(typed)}${esc(ini.length < 3 ? 'h' : '')}”.</p>`
+          : `<button type="button" class="link-btn" id="forceNew">No, I'm new: add “${esc(typed)}”</button>`}`;
       similarBox.hidden = false;
     }
   }
