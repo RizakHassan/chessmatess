@@ -21,9 +21,10 @@
     box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
   }
   .field > label { display: flex; align-items: center; gap: 8px; }
-  .swatch { width: 16px; height: 16px; border-radius: 4px; flex: none; }
-  .swatch.white { background: var(--cream); box-shadow: 0 0 0 1.5px var(--slate) inset; }
-  .swatch.black { background: var(--ink); }
+  /* little pawns mark the colours (squares looked like checkboxes) */
+  .pawn { width: 18px; height: 18px; flex: none; }
+  .pawn.white { fill: var(--cream); stroke: var(--slate); stroke-width: 1.4; stroke-linejoin: round; }
+  .pawn.black { fill: var(--ink); }
 
   .combo { position: relative; }
   .combo .input { font-size: 18px; padding: 14px 46px 14px 14px; }
@@ -71,6 +72,12 @@
 
   .newbie { margin-top: 24px; padding: 0 2px; }
   .newbie p { margin: 0; color: var(--text-2); }
+  .newbie #meLine {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px;
+    padding: 12px 14px; border-radius: var(--r-row); background: var(--surface); box-shadow: 0 0 0 1px var(--line) inset;
+  }
+  #meLine .me-links { display: flex; gap: 14px; font-size: 14px; }
+  #meLine .link-btn { text-decoration-color: var(--line-strong); text-decoration-thickness: 1.5px; }
   .newbie form { display: grid; gap: 8px; margin-top: 12px; }
   .newbie .row { display: flex; gap: 8px; }
   .newbie .row .input { flex: 1; min-width: 0; }
@@ -147,7 +154,7 @@
   <div id="form">
     <section class="match">
       <div class="field">
-        <label for="p1"><span class="swatch white"></span>White</label>
+        <label for="p1"><svg class="pawn white" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6.2" r="3.3"/><path d="M9 11h6c0 1.3-.7 2.2-1.6 2.8L14.6 19H9.4l1.2-5.2C9.7 13.2 9 12.3 9 11z"/><rect x="6.5" y="19" width="11" height="3" rx="1.5"/></svg>White</label>
         <div class="combo" id="c1">
           <input class="input" id="p1" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
           <button class="clear" type="button" aria-label="Clear white player">×</button>
@@ -156,7 +163,7 @@
       </div>
       <div class="vs">vs</div>
       <div class="field">
-        <label for="p2"><span class="swatch black"></span>Black</label>
+        <label for="p2"><svg class="pawn black" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6.2" r="3.3"/><path d="M9 11h6c0 1.3-.7 2.2-1.6 2.8L14.6 19H9.4l1.2-5.2C9.7 13.2 9 12.3 9 11z"/><rect x="6.5" y="19" width="11" height="3" rx="1.5"/></svg>Black</label>
         <div class="combo" id="c2">
           <input class="input" id="p2" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
           <button class="clear" type="button" aria-label="Clear black player">×</button>
@@ -173,7 +180,7 @@
     </section>
 
     <section class="newbie">
-      <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <a class="link-btn" id="myStats" href="/player">Your stats</a> · <button class="link-btn" id="notMe" type="button">Not you?</button></p>
+      <p id="meLine" hidden><span>You're <b id="meName"></b> on this phone</span><span class="me-links"><a class="link-btn" id="myStats" href="/player">Your stats</a><button class="link-btn" id="notMe" type="button">Not you?</button></span></p>
       <div class="suggest" id="suggestMe" hidden></div>
       <p id="newLine">Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
       <form id="newForm" hidden novalidate>
@@ -395,7 +402,7 @@
     document.getElementById('doneLines').innerHTML = line(g.p1, g.p1_elo, d1) + line(g.p2, g.p2_elo, d2);
     const note = document.getElementById('doneNote');
     note.hidden = g.counted !== false;
-    note.textContent = `This counts for Elo, but not on tonight's board: you've played each other ${g.pair_games} times tonight and only the first 3 count. Try someone new!`;
+    note.textContent = `This counts for Elo, but not on tonight's board: you've played each other ${g.pair_games} times tonight and only the first 3 count. Try someone new.`;
     const mine = me === g.p1_id || me === g.p2_id;
     fillSuggest(document.getElementById('doneNext'), mine
       ? suggestHtml('Fair next games for you', me, next[me])

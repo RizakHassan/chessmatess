@@ -33,7 +33,7 @@
   .view { --fs: clamp(19px, 2.05vw, 27px); }
   .view.month { --fs: clamp(17px, 1.85vw, 23px); }
   .cols, .row { display: grid; align-items: center; column-gap: 16px; }
-  .tonight .cols, .tonight .row { grid-template-columns: calc(var(--fs) * 2.2) minmax(0, 1fr) calc(var(--fs) * 6) calc(var(--fs) * 4) calc(var(--fs) * 4.4); }
+  .tonight .cols, .tonight .row { grid-template-columns: calc(var(--fs) * 2.2) minmax(0, 1fr) calc(var(--fs) * 6) calc(var(--fs) * 4) calc(var(--fs) * 5); }
   .month .cols, .month .row { grid-template-columns: calc(var(--fs) * 2.2) minmax(0, 1fr) calc(var(--fs) * 4) calc(var(--fs) * 6) calc(var(--fs) * 4.4); }
   .cols { padding: 0 24px 10px; color: var(--muted); font-size: 15px; font-weight: 600; }
   .r { text-align: right; justify-self: end; }
@@ -66,6 +66,10 @@
   .row .wdl b { color: var(--text); font-weight: 700; }
   .row .elo { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; transition: color 1.8s; }
   .row .chip { font-size: .72em; }
+  /* Tonight is ranked by rating gained, so that number leads: bigger and bolder, Elo steps back */
+  .tonight.by-gain .row .chip { font-size: .92em; font-weight: 750; min-width: 3.3em; text-align: center; padding: .22em .55em; }
+  .tonight.by-gain .row:not(.p1) .elo { color: var(--text-2); font-weight: 550; }
+  .tonight.by-gain .cols > :nth-child(5) { color: var(--slate-deep); }
 
   /* podium: leader in slate with the orange rank, 2nd/3rd on sky */
   .row.p1 {
@@ -116,6 +120,7 @@
   .skeleton-row { height: 66px; border-radius: var(--r-row); }
 
   .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 15px; margin: 20px 24px 0; gap: 12px; flex-wrap: wrap; }
+  .meta .rule + .rule::before { content: "·"; margin: 0 .5em; color: var(--line-strong); }
 
   /* "This month": a sky-blue poster card framed for an Instagram screenshot */
   .month .card {
@@ -188,7 +193,9 @@
   .history .htag.past { background: var(--orange); color: var(--ink); }
   .history .hhint { font-size: 13px; color: var(--muted); }
   .board { touch-action: pan-y; } /* horizontal swipes flip weeks; vertical scrolling still works */
-  @media (max-width: 760px) { .history .hbtn span { display: none; } .history .hlabel { font-size: 14px; } }
+  .history .hlabel { min-width: 0; }
+  .history .hlabel b { overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 760px) { .history .hbtn span, .history .hhint { display: none; } .history .hlabel { font-size: 14px; } }
 
   body.clean header, body.clean .meta, body.clean .conn, body.clean .history, body.clean .site-foot { display: none; }
   body.clean .wrap { padding-top: 48px; }
@@ -200,6 +207,12 @@
     .tonight .cols, .tonight .row { grid-template-columns: 1.6rem minmax(0, 1fr) 5.4rem 3.4rem; }
     .month .cols, .month .row { grid-template-columns: 1.6rem minmax(0, 1fr) 3.4rem 5.4rem; }
     .cols > :nth-child(5), .row > .chip-cell { display: none; }
+    .tonight.by-gain .cols, .tonight.by-gain .row { grid-template-columns: 1.6rem minmax(0, 1fr) 5rem 3.8rem; }
+    .tonight.by-gain .cols > :nth-child(4), .tonight.by-gain .row > .elo { display: none; }
+    .tonight.by-gain .cols > :nth-child(5), .tonight.by-gain .row > .chip-cell { display: block; }
+    .meta { margin-inline: 6px; font-size: 14px; }
+    .meta .rule { display: block; }
+    .meta .rule + .rule::before { content: none; }
     .cols { padding-inline: 14px; font-size: 13px; }
     .row, .month .row { padding: 12px 14px; column-gap: 10px; }
     .row.p1, .month .row.p1 { padding-block: 16px; }
@@ -228,13 +241,13 @@
     </nav>
   </header>
 
-  <section class="view tonight active" id="view-tonight" aria-label="Tonight">
+  <section class="view tonight by-gain active" id="view-tonight" aria-label="Tonight">
     <nav class="history" id="nav-tonight" aria-label="Browse club nights">
       <button class="hbtn" data-dir="older" aria-label="Previous club night">‹ <span>Previous week</span></button>
       <div class="hlabel"><b data-label></b><span class="htag" data-tag></span><span class="hhint" hidden>No earlier weeks yet</span></div>
       <button class="hbtn" data-dir="newer" aria-label="Next club night"><span>Next</span> ›</button>
     </nav>
-    <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r" id="colNight">Tonight</div></div>
+    <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r" id="colNight">Gained</div></div>
     <div class="board" id="board-tonight"></div>
     <div class="meta"><span id="tonightMeta"></span><span id="rankRule">Ranked by rating gained tonight</span></div>
   </section>
@@ -449,10 +462,12 @@
       notes.push(`${esc(top.name)} needs ${more} more opponent${more === 1 ? '' : 's'} for the ${KING}`);
     }
     document.getElementById('tonightMeta').innerHTML = notes.join(' · ');
-    document.getElementById('colNight').textContent = past ? 'That night' : 'Tonight';
-    document.getElementById('rankRule').innerHTML = t.rule === 'wins'
-      ? `Most wins ${when}, Elo breaks ties${legend(t.rows)}`
-      : `Ranked by rating gained ${when} · up to ${t.repeatLimit} games per opponent count · ${KING} needs ${t.titleMinOpponents}+ opponents`;
+    const byGain = t.rule !== 'wins';
+    document.getElementById('view-tonight').classList.toggle('by-gain', byGain);
+    document.getElementById('colNight').textContent = byGain ? 'Gained' : past ? 'That night' : 'Tonight';
+    document.getElementById('rankRule').innerHTML = byGain
+      ? `<span class="rule">Ranked by rating gained</span><span class="rule">Max ${t.repeatLimit} games per opponent</span><span class="rule">${KING} needs ${t.titleMinOpponents} opponents</span>`
+      : `Most wins ${when}, Elo breaks ties${legend(t.rows)}`;
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
       `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`,
       { quiet });

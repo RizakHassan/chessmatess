@@ -87,7 +87,14 @@
     background: rgba(254, 80, 45, .08); box-shadow: 0 0 0 1.5px rgba(254, 80, 45, .35) inset;
   }
   .repeats ul { margin: 6px 0 0; padding-left: 18px; }
-  .uncounted { display: inline-block; margin-left: 6px; font: 600 11px var(--mono); color: var(--orange); white-space: nowrap; }
+  .uncounted {
+    display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px; vertical-align: 1px;
+    font: 600 11px var(--font); color: #a8321b; background: rgba(254, 80, 45, .1); white-space: nowrap;
+  }
+  /* a Delete on every row is loud: keep it quiet until hovered (it still needs a second tap) */
+  #games .btn.danger.small:not(.armed) { border-color: transparent; background: transparent; color: var(--muted); }
+  #games tr:hover .btn.danger.small:not(.armed), #games .btn.danger.small:focus-visible { color: var(--down); }
+  #games .btn.danger.small:not(.armed):hover { background: var(--down-wash); border-color: var(--down); }
   label.toggle { font-size: 14px; color: var(--text-2); font-weight: 500; display: flex; gap: 6px; align-items: center; cursor: pointer; }
   label.toggle input { accent-color: var(--slate); }
   .empty-row td { color: var(--muted); padding: 22px 8px; }
