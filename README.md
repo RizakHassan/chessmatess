@@ -42,7 +42,7 @@ This writes `chessmatess-export.json`. Upload it in **Admin → Backups → Rest
 
 1. Open `/admin` and click **Start new session**. This resets the Tonight board and **creates a new club code**, so last week's QR stops working. If you forget, the first logged game creates a session automatically, but the code stays the same.
 2. Put `/display` on the projector and press `F11` for full screen. The current QR code shows on the right of the **Tonight** tab. It only appears on a browser that has the admin PIN saved, and never on the **This month** tab or in clean mode, so Instagram screenshots don't leak it.
-3. Players scan the QR with their phone camera. If a camera won't scan, they can go to `chessmatess.com/log` (or tap **Log a game** on the leaderboard) and type the code shown under the QR, for example `MX5N-B8BW`. Phones just need mobile data or any Wi-Fi.
+3. Players scan the QR with their phone camera. If a camera won't scan, they can go to `chessmatess.com/log` (or tap **Log a game** on the leaderboard) and type the code shown under the QR, for example `MX5N-B8BW`. Anyone already logging can tap **Let a friend scan in** at the bottom of the log page to show the QR on their own phone. Phones just need mobile data or any Wi-Fi.
 
 **Automatic sessions.** When logging opens, a new session starts by itself, with a new QR code, so you no longer have to click **Start new session**. It's skipped if a session was already started in the last 12 hours. Turn it off in **Admin → Logging hours**.
 

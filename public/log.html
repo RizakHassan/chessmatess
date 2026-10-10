@@ -120,6 +120,20 @@
   .code-form .btn { padding: 12px 18px; }
   .locked .error-text { color: var(--down); margin: 10px 2px 0; }
 
+  /* show this phone's QR so a friend can scan in from it */
+  .share { margin-top: 22px; }
+  .share-btn { width: 100%; padding: 13px; font-weight: 700; color: var(--slate); }
+  .share-btn[aria-expanded="true"] { background: var(--sky-soft); }
+  .share-card {
+    margin-top: 10px; padding: 22px 22px 26px; text-align: center; background: var(--surface); border-radius: var(--r-container);
+    box-shadow: 0 0 0 3px var(--slate) inset, inset 0 -8px 0 var(--slate), 8px 8px 0 var(--sky);
+    animation: pop .3s var(--ease-out);
+  }
+  .share-card .qr { width: min(240px, 70vw); margin: 0 auto; }
+  .share-card .qr svg { display: block; width: 100%; height: auto; }
+  .share-card p { margin: 16px 0 4px; font-size: 14px; color: var(--text-2); }
+  .share-card .code { display: block; font: 800 26px var(--mono); letter-spacing: .06em; }
+
   .done {
     display: none; padding: 24px 20px 20px; background: var(--surface); border-radius: var(--r-container);
     box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
@@ -223,6 +237,15 @@
         <div class="similar" id="similar" hidden></div>
       </form>
     </section>
+
+    <section class="share">
+      <button class="btn share-btn" id="shareBtn" type="button" aria-expanded="false" aria-controls="shareCard">Let a friend scan in</button>
+      <div class="share-card" id="shareCard" hidden>
+        <div class="qr" id="shareQr"></div>
+        <p>Point their phone camera here, or they can go to <b id="shareHost"></b> and enter</p>
+        <b class="code" id="shareCode"></b>
+      </div>
+    </section>
   </div>
 
   <section class="done" id="done" aria-live="polite">
@@ -238,6 +261,7 @@
 <footer class="site-foot">Designed by <a href="https://rizak.dev" target="_blank" rel="noopener">rizak.dev</a></footer>
 <div class="toast" id="toast"></div>
 
+<script src="/vendor/qrcode.js"></script>
 <script src="/live.js"></script>
 <script>
 (() => {
@@ -298,6 +322,26 @@
 
   if (!clubCode) lock();
   else post('/api/code/check', {}).catch(() => {});
+
+  // "Let a friend scan in": the same link the projector QR uses, drawn from the code this phone holds.
+  const shareBtn = document.getElementById('shareBtn'), shareCard = document.getElementById('shareCard');
+  function drawShare() {
+    if (!clubCode) { shareCard.hidden = true; shareBtn.setAttribute('aria-expanded', 'false'); return; }
+    const qr = qrcode(0, 'M');
+    qr.addData(`${location.origin}/log?c=${encodeURIComponent(clubCode)}`);
+    qr.make();
+    document.getElementById('shareQr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code for a friend to scan' });
+    document.getElementById('shareHost').textContent = location.host + '/log';
+    document.getElementById('shareCode').textContent = clubCode.slice(0, 4) + '-' + clubCode.slice(4);
+  }
+  shareBtn.addEventListener('click', () => {
+    const open = shareCard.hidden;
+    if (open) drawShare();
+    shareCard.hidden = !open || !clubCode;
+    shareBtn.setAttribute('aria-expanded', String(!shareCard.hidden));
+    shareBtn.textContent = shareCard.hidden ? 'Let a friend scan in' : 'Hide QR code';
+    if (!shareCard.hidden) shareCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   // Typing the code works the same as scanning: it's checked, then remembered on this phone.
   const cleanCode = v => String(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
