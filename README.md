@@ -42,7 +42,7 @@ This writes `chessmatess-export.json`. Upload it in **Admin → Backups → Rest
 
 1. Open `/admin` and click **Start new session**. This resets the Tonight board and **creates a new club code**, so last week's QR stops working. If you forget, the first logged game creates a session automatically, but the code stays the same.
 2. Put `/display` on the projector and press `F11` for full screen. The current QR code shows on the right of the **Tonight** tab. It only appears on a browser that has the admin PIN saved, and never on the **This month** tab or in clean mode, so Instagram screenshots don't leak it.
-3. Players scan the QR with their phone camera. Phones just need mobile data or any Wi-Fi.
+3. Players scan the QR with their phone camera. If a camera won't scan, they can go to `chessmatess.com/log` (or tap **Log a game** on the leaderboard) and type the code shown under the QR, for example `MX5N-B8BW`. Phones just need mobile data or any Wi-Fi.
 
 **Automatic sessions.** When logging opens, a new session starts by itself, with a new QR code, so you no longer have to click **Start new session**. It's skipped if a session was already started in the last 12 hours. Turn it off in **Admin → Logging hours**.
 
@@ -64,7 +64,7 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 ## Security
 
 - **Admin PIN** (`ADMIN_PIN` secret). It protects `/admin`, `/qr` and the admin API. Each device remembers the PIN after you first enter it.
-- **Club code.** The QR link carries an 8-character code (`/log?c=…`), and each phone remembers it until the code changes. A new code is created every time you start a new session, and you can click **Change code** in admin at any time. Phones holding an old code are asked to scan the new QR. People who only know the web address can see the leaderboard but can't log games or add names.
+- **Club code.** The QR link carries an 8-character code (`/log?c=…`), and each phone remembers it until the code changes. The code is also printed under the QR on the projector and the printed sheet, and it can be typed on the log page. Capitals, spaces and the dash don't matter. A new code is created every time you start a new session, and you can click **Change code** in admin at any time. Phones holding an old code are asked to scan the new QR. People who only know the web address can see the leaderboard but can't log games or add names.
 - **Logging hours.** Results are only accepted during the hours set in admin. This is checked on the server, not just in the page.
 - **Guessing protection.** Repeated wrong PINs or codes from one IP address are locked out for 15 minutes. PIN and club-code failures are counted separately. Everyone at the venue shares one IP address, so phones can never lock the admin out.
 

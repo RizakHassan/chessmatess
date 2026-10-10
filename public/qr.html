@@ -83,7 +83,7 @@
     qr.addData(url);
     qr.make();
     document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code linking to the Chessmatess log page' });
-    document.getElementById('url').textContent = url;
+    document.getElementById('url').innerHTML = `No camera? Go to <b>${location.host}/log</b> and enter <b>${data.code.slice(0, 4)}-${data.code.slice(4)}</b>`;
     document.getElementById('pinForm').hidden = true;
     document.getElementById('sheet').hidden = false;
   }

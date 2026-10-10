@@ -31,7 +31,8 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 // Wrong guesses allowed per IP before a 15-minute lockout. Club-code and PIN failures are
 // counted separately: everyone at the venue shares one public IP, and phones must never
 // be able to lock the admin out.
-const LIMITS = { pin: 8, code: 20 };
+// Codes can be typed by hand, so allow for typos; 8 characters from 31 still can't be guessed at this rate.
+const LIMITS = { pin: 8, code: 60 };
 const LOCKOUT_MS = 15 * 60 * 1000;
 
 class HttpError extends Error {
@@ -145,15 +146,15 @@ export class Club extends DurableObject {
 
   requireClubCode(request) {
     const ip = this.ipOf(request);
-    const given = (request.headers.get('x-club-code') || '').trim().toUpperCase();
+    const given = (request.headers.get('x-club-code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (given && safeEqual(given, this.club.getSetting('club_code'))) return;
     // A phone remembering a recently replaced code is not a guess: don't count it.
     if (!given || this.retiredCodes().includes(given)) {
-      throw new HttpError(403, 'The club QR code has changed. Scan the new one on the projector to log games.');
+      throw new HttpError(403, 'The club code has changed. Scan the new QR code on the projector, or type the code shown under it.');
     }
     this.checkLockout('code', ip);
     this.recordFail('code', ip);
-    throw new HttpError(403, 'This link has expired. Scan the QR code on the projector to log games.');
+    throw new HttpError(403, "That code isn't right. Scan the QR code on the projector, or type the code shown under it.");
   }
 
   // New code for the QR; the previous few are remembered so phones holding them get a

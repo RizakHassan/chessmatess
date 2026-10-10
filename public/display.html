@@ -185,6 +185,8 @@
   .qrcard .qr svg { width: 100%; height: auto; display: block; }
   .qrcard b { display: block; margin-top: 10px; font-size: 18px; letter-spacing: -0.01em; }
   .qrcard span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .qrcard .typed { margin-top: 12px; padding-top: 10px; border-top: 1.5px dashed var(--line-strong); font-size: 13px; color: var(--text-2); }
+  .qrcard .typed b { margin: 4px 0 2px; font: 800 24px var(--mono); letter-spacing: .06em; color: var(--ink); }
   @media (min-width: 1000px) {
     body.has-qr.tab-tonight:not(.clean) .qrcard { display: block; }
     body.has-qr.tab-tonight:not(.clean) .wrap { max-width: none; margin: 0 300px 0 max(32px, calc(50vw - 900px)); }
@@ -356,6 +358,7 @@
   <div class="qr" id="qr"></div>
   <b>Scan to log a game</b>
   <span id="qrNote">Point your phone camera here</span>
+  <div class="typed">or go to <strong id="qrHost"></strong>/log and enter<b id="qrCode"></b></div>
 </aside>
 <div class="conn" id="conn"><i></i><span>Connecting</span></div>
 
@@ -507,6 +510,8 @@
         qr.addData(`${location.origin}/log?c=${encodeURIComponent(code)}`);
         qr.make();
         document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true, alt: 'QR code to log a game' });
+        document.getElementById('qrHost').textContent = location.host;
+        document.getElementById('qrCode').textContent = code.slice(0, 4) + '-' + code.slice(4);
       }
       document.body.classList.add('has-qr');
     } catch { /* offline: keep whatever is shown */ }

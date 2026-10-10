@@ -112,6 +112,13 @@
   .locked.closed { border-top-color: var(--slate); }
   .locked h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
   .locked p { margin: 0; color: var(--text-2); }
+  .code-form { display: flex; gap: 8px; margin-top: 18px; }
+  .code-form .input {
+    flex: 1; min-width: 0; font: 700 22px var(--mono); letter-spacing: .12em; text-transform: uppercase; text-align: center; padding: 12px;
+  }
+  .code-form .input::placeholder { letter-spacing: .12em; color: var(--line-strong); }
+  .code-form .btn { padding: 12px 18px; }
+  .locked .error-text { color: var(--down); margin: 10px 2px 0; }
 
   .done {
     display: none; padding: 24px 20px 20px; background: var(--surface); border-radius: var(--r-container);
@@ -157,8 +164,13 @@
   <p class="lead" id="lead">Pick both players, then tap the result.</p>
 
   <section class="locked" id="locked" hidden>
-    <h2>Scan the club QR code</h2>
-    <p id="lockedMsg">Logging games needs the club QR code. Scan the one on the projector with your phone camera and this page will open ready to go.</p>
+    <h2>Scan the QR code or enter the club code</h2>
+    <p id="lockedMsg">Logging games needs tonight's club code. Scan the QR code on the projector with your phone camera, or type the code shown under it.</p>
+    <form class="code-form" id="codeForm" novalidate>
+      <input class="input" id="codeInput" placeholder="ABCD-1234" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Club code">
+      <button class="btn primary" type="submit">Go</button>
+    </form>
+    <p class="error-text" id="codeErr" aria-live="polite"></p>
   </section>
 
   <section class="locked closed" id="closed" hidden>
@@ -286,6 +298,35 @@
 
   if (!clubCode) lock();
   else post('/api/code/check', {}).catch(() => {});
+
+  // Typing the code works the same as scanning: it's checked, then remembered on this phone.
+  const cleanCode = v => String(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const codeInput = document.getElementById('codeInput'), codeErr = document.getElementById('codeErr');
+  codeInput.addEventListener('input', () => {
+    const c = cleanCode(codeInput.value).slice(0, 8);
+    codeInput.value = c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; // shown as ABCD-1234, like the projector
+    codeErr.textContent = '';
+  });
+  document.getElementById('codeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const code = cleanCode(codeInput.value);
+    if (code.length !== 8) { codeErr.textContent = 'The code has 8 letters and numbers.'; codeInput.focus(); return; }
+    clubCode = code;
+    try {
+      await post('/api/code/check', {});
+      store.set(code);
+      codeInput.value = ''; codeErr.textContent = '';
+      document.getElementById('locked').hidden = true;
+      document.getElementById('lead').hidden = false;
+      document.getElementById('form').hidden = false;
+      checkHours();
+      toast("You're in. Pick the players to log a game.");
+    } catch (err) {
+      document.getElementById('lockedMsg').textContent = "Logging games needs tonight's club code. Scan the QR code on the projector with your phone camera, or type the code shown under it.";
+      codeErr.textContent = err.message;
+      codeInput.focus(); codeInput.select();
+    }
+  });
 
   /* ---------- club hours ---------- */
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
