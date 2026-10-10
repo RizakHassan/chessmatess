@@ -97,6 +97,8 @@ const cleanDevice = id => (/^[A-Za-z0-9-]{8,64}$/.test(String(id ?? '')) ? Strin
 
 export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000; // same pairing + result this soon is probably logged twice
 export const SELF_UNDO_MS = 75 * 1000;             // phone shows 60s; a little grace for slow networks
+export const REPEAT_LIMIT = 3;                      // games between the same two players that count toward one night
+export const TITLE_MIN_OPPONENTS = 3;               // different opponents needed to win a club night (♚)
 
 // Self-added players give a first name plus last-name initial: ("rizak", "h") -> "Rizak H".
 // Up to three letters are allowed after the space so two "Sam W"s can become "Sam W" and "Sam Wh".
@@ -176,6 +178,14 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   const getSetting = key => one('SELECT value FROM settings WHERE key = ?', key)?.value ?? null;
   const setSetting = (key, value) =>
     sql.all('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, String(value));
+
+  // Fair-play night rules (ranked by rating gained, repeat cap, ♚ needs 3 opponents) apply from this
+  // session on. Nights played before the rules existed keep their old ranking (most wins) and titles.
+  if (getSetting('fair_rules_from') === null) {
+    setSetting('fair_rules_from', (one('SELECT MAX(id) AS m FROM sessions')?.m ?? 0) + 1);
+  }
+  const fairFrom = Number(getSetting('fair_rules_from'));
+  const isLegacy = sessionId => sessionId < fairFrom;
 
   /* ---------- logging hours ---------- */
 
@@ -379,9 +389,12 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, p1Id, p2Id, result, d1, d2, session.id, now(), deviceId);
       sql.all('UPDATE players SET elo = elo + ? WHERE id = ?', d1, p1Id);
       sql.all('UPDATE players SET elo = elo + ? WHERE id = ?', d2, p2Id);
+      const pairGames = one(`SELECT COUNT(*) AS n FROM games WHERE session_id = ?
+                             AND ((p1_id = ? AND p2_id = ?) OR (p1_id = ? AND p2_id = ?))`, session.id, p1Id, p2Id, p2Id, p1Id).n;
       return {
-        id: game.id, p1: p1.name, p2: p2.name, result, p1_delta: d1, p2_delta: d2,
+        id: game.id, p1: p1.name, p2: p2.name, p1_id: p1Id, p2_id: p2Id, result, p1_delta: d1, p2_delta: d2,
         p1_elo: Math.round(p1.elo + d1), p2_elo: Math.round(p2.elo + d2),
+        pair_games: pairGames, counted: isLegacy(session.id) || pairGames <= REPEAT_LIMIT,
       };
     });
   }
@@ -442,14 +455,39 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     return last.id;
   }
 
+  // pair_n: this pairing's nth game of its night. Past the repeat limit a game still moves Elo
+  // but doesn't count toward that night's board.
   function recentGames(limit = 50) {
     return sql.all(`
-      SELECT g.*, a.name AS p1_name, b.name AS p2_name, s.label AS session_label
+      SELECT g.*, a.name AS p1_name, b.name AS p2_name, s.label AS session_label,
+        ROW_NUMBER() OVER (PARTITION BY g.session_id, MIN(g.p1_id, g.p2_id), MAX(g.p1_id, g.p2_id)
+                           ORDER BY g.created_at, g.id) AS pair_n
       FROM games g
       JOIN players a ON a.id = g.p1_id
       JOIN players b ON b.id = g.p2_id
       JOIN sessions s ON s.id = g.session_id
-      ORDER BY g.created_at DESC, g.id DESC LIMIT ?`, limit);
+      ORDER BY g.created_at DESC, g.id DESC LIMIT ?`, limit)
+      .map(g => ({ ...g, counted: isLegacy(g.session_id) || g.pair_n <= REPEAT_LIMIT }));
+  }
+
+  // "Who should I play next?": people at the club tonight, closest in rating, new opponents first.
+  function suggestOpponents(playerId, limit = 3) {
+    const session = currentSession();
+    const me = one('SELECT id, elo FROM players WHERE id = ? AND active = 1', Number(playerId));
+    if (!session || !me) return [];
+    const here = new Set(), played = new Map();
+    for (const g of sql.all('SELECT p1_id, p2_id FROM games WHERE session_id = ?', session.id)) {
+      here.add(g.p1_id); here.add(g.p2_id);
+      const opp = g.p1_id === me.id ? g.p2_id : g.p2_id === me.id ? g.p1_id : null;
+      if (opp) played.set(opp, (played.get(opp) || 0) + 1);
+    }
+    for (const p of sql.all('SELECT id FROM players WHERE created_at >= ?', session.created_at)) here.add(p.id); // joined tonight
+    here.delete(me.id);
+    return sql.all('SELECT id, name, elo FROM players WHERE active = 1')
+      .filter(p => here.has(p.id) && (played.get(p.id) || 0) < REPEAT_LIMIT)
+      .map(p => ({ id: p.id, name: p.name, elo: Math.round(p.elo), gap: Math.round(Math.abs(p.elo - me.elo)), played: played.get(p.id) || 0 }))
+      .sort((a, b) => (a.gap + 100 * a.played) - (b.gap + 100 * b.played) || a.name.localeCompare(b.name))
+      .slice(0, limit);
   }
 
   /* ---------- standings ---------- */
@@ -471,6 +509,51 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     return rows;
   }
 
+  // One night's rows. Games are in play order; under the fair rules only the first REPEAT_LIMIT games
+  // of each pairing count, and each row carries how many different opponents that player faced.
+  function nightTally(games, legacy) {
+    if (legacy) return tally(games);
+    const pairs = new Map(), opponents = new Map(), skipped = new Map();
+    const counted = games.filter(g => {
+      const key = Math.min(g.p1_id, g.p2_id) + '-' + Math.max(g.p1_id, g.p2_id);
+      const n = (pairs.get(key) || 0) + 1;
+      pairs.set(key, n);
+      for (const [a, b] of [[g.p1_id, g.p2_id], [g.p2_id, g.p1_id]]) {
+        if (!opponents.has(a)) opponents.set(a, new Set());
+        opponents.get(a).add(b);
+      }
+      if (n > REPEAT_LIMIT) for (const id of [g.p1_id, g.p2_id]) skipped.set(id, (skipped.get(id) || 0) + 1);
+      return n <= REPEAT_LIMIT;
+    });
+    const rows = tally(counted);
+    for (const r of rows.values()) { r.opponents = opponents.get(r.id).size; r.uncounted = skipped.get(r.id) || 0; }
+    return rows;
+  }
+
+  const byName = (x, y) => x.name.localeCompare(y.name);
+  const rankNight = (rows, legacy) => rows.sort(legacy
+    ? (x, y) => y.w - x.w || y.elo - x.elo || byName(x, y)
+    : (x, y) => y.delta - x.delta || y.elo - x.elo || byName(x, y));
+  // Who takes the ♚ from a ranked night: the top row (with a win), and under the fair rules
+  // the top row that also faced enough different opponents.
+  const nightLeader = (rows, legacy) =>
+    rows.find(r => r.w > 0 && (legacy || r.opponents >= TITLE_MIN_OPPONENTS)) ?? null;
+  const nightGames = sessionId => sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', sessionId);
+
+  function nightInfo(sessionId, rows, games) {
+    const legacy = isLegacy(sessionId);
+    const pairs = new Map();
+    const uncounted = legacy ? 0 : games.filter(g => {
+      const key = Math.min(g.p1_id, g.p2_id) + '-' + Math.max(g.p1_id, g.p2_id);
+      pairs.set(key, (pairs.get(key) || 0) + 1);
+      return pairs.get(key) > REPEAT_LIMIT;
+    }).length;
+    return {
+      rule: legacy ? 'wins' : 'gain', repeatLimit: REPEAT_LIMIT, titleMinOpponents: TITLE_MIN_OPPONENTS, uncounted,
+      leader_id: nightLeader(rows, legacy)?.id ?? null,
+    };
+  }
+
   function withPlayers(rows) {
     const byId = new Map(sql.all('SELECT id, name, elo FROM players WHERE active = 1').map(p => [p.id, p]));
     const out = [];
@@ -484,10 +567,10 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   function tonightStandings() {
     const session = currentSession();
     if (!session) return { session: null, rows: [], gameCount: 0 };
-    const games = sql.all('SELECT * FROM games WHERE session_id = ?', session.id);
-    const rows = withTitles(withPlayers(tally(games)), nightTitles())
-      .sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
-    return { session, rows, gameCount: games.length };
+    const legacy = isLegacy(session.id);
+    const games = nightGames(session.id);
+    const rows = rankNight(withTitles(withPlayers(nightTally(games, legacy)), nightTitles()), legacy);
+    return { session, rows, gameCount: games.length, ...nightInfo(session.id, rows, games) };
   }
 
   // "2026-10" for the month `date` falls in, in club time.
@@ -520,19 +603,20 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
   }
 
   // Rows for a past period: ratings as they were at its last game; removed players included.
-  function historicRows(games) {
+  function historicRows(games, tallied = tally(games)) {
     if (!games.length) return [];
     const ratings = ratingsAfter(games[games.length - 1]);
     const names = new Map(sql.all('SELECT id, name FROM players').map(p => [p.id, p.name]));
-    return [...tally(games).values()].map(r => ({
+    return [...tallied.values()].map(r => ({
       ...r, name: names.get(r.id) ?? '?', elo: Math.round(ratings.get(r.id) ?? START_ELO), delta: Math.round(r.delta),
     }));
   }
 
   /* ---------- club nights won ---------- */
 
-  // The #1 of each finished club night (most wins, then Elo at the end of the night).
-  // A night is finished once a newer session exists or logging has closed; a winner needs at least one win.
+  // The #1 of each finished club night: most rating gained (repeat games capped), with at least one win
+  // and TITLE_MIN_OPPONENTS different opponents. Nights before the fair rules: most wins, then Elo.
+  // A night is finished once a newer session exists or logging has closed.
   let winnersCache = { key: null, value: [] };
   function nightWinners() {
     const current = currentSession();
@@ -544,9 +628,10 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     const winners = [];
     for (const s of sql.all('SELECT s.id FROM sessions s WHERE EXISTS (SELECT 1 FROM games g WHERE g.session_id = s.id) ORDER BY s.id')) {
       if (current && s.id === current.id && !tonightOver) continue;
-      const games = sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', s.id);
-      const [top] = historicRows(games).sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
-      if (top && top.w > 0) winners.push({ session_id: s.id, player_id: top.id, ended_at: games[games.length - 1].created_at });
+      const legacy = isLegacy(s.id);
+      const games = nightGames(s.id);
+      const top = nightLeader(rankNight(historicRows(games, nightTally(games, legacy)), legacy), legacy);
+      if (top) winners.push({ session_id: s.id, player_id: top.id, ended_at: games[games.length - 1].created_at });
     }
     winnersCache = { key, value: winners };
     return winners;
@@ -641,10 +726,10 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     if (!session) throw new Error('Session not found');
     const current = currentSession();
     if (current && current.id === session.id) return { ...tonightStandings(), current: true };
-    const games = sql.all('SELECT * FROM games WHERE session_id = ? ORDER BY created_at, id', session.id);
-    const rows = withTitles(historicRows(games), nightTitles(w => w.session_id <= session.id))
-      .sort((x, y) => y.w - x.w || y.elo - x.elo || x.name.localeCompare(y.name));
-    return { session, rows, gameCount: games.length, current: false };
+    const legacy = isLegacy(session.id);
+    const games = nightGames(session.id);
+    const rows = rankNight(withTitles(historicRows(games, nightTally(games, legacy)), nightTitles(w => w.session_id <= session.id)), legacy);
+    return { session, rows, gameCount: games.length, current: false, ...nightInfo(session.id, rows, games) };
   }
 
   function listMonths() {
@@ -816,7 +901,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     saveBackup, listBackups, getBackup, restoreBackup,
     currentSession, startSession,
     listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
-    logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames,
+    logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames, suggestOpponents,
     tonightStandings, monthStandings, snapshot, nightWinners, playerStats, listSessions, sessionStandings, listMonths, monthStandingsFor,
     exportData, importData, spreadsheetSheets,
   };

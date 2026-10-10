@@ -8,7 +8,7 @@ It runs on **Cloudflare** with nothing to keep switched on. A Worker serves the 
 
 | URL | What it's for |
 | --- | --- |
-| `/display` | Projector view. **Tonight** ranks players by wins this session, with Elo as the tiebreaker. **This month** ranks by Elo with monthly W-D-L, laid out for an Instagram screenshot. Anyone can view it. |
+| `/display` | Projector view. **Tonight** ranks players by rating gained this session, with Elo as the tiebreaker (see [Fair matchups](#fair-matchups)). **This month** ranks by Elo with monthly W-D-L, laid out for an Instagram screenshot. Anyone can view it. |
 | `/log` | Mobile page opened from the club QR code. Pick two players and tap who won, or **Draw**. New people tap **Add your name**. Logging only works with the club code that the QR carries. |
 | `/admin` | Needs the admin PIN. Add, rename, remove or restore players. Undo or delete a mis-logged game, which recalculates Elo. Start a new session. Change the club code. Download or restore an export. |
 | `/qr` | Printable A4 sheet with the QR code. It needs the admin PIN, because the QR contains the club code. |
@@ -52,7 +52,7 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 
 ### Display tips
 
-- **Club nights won (♚):** the #1 of each finished club night (most wins, Elo as tiebreak) earns a title, shown as a ♚ count next to their name on both boards and as a column in the Excel download. A night counts once logging has closed or the next session has started, and needs at least one win. Past weeks show the count as it stood then.
+- **Club nights won (♚):** the top player of each finished club night who beat someone and faced at least 3 different opponents earns a title, shown as a ♚ count next to their name on both boards and as a column in the Excel download. A night counts once logging has closed or the next session has started, and needs at least one win. Past weeks show the count as it stood then.
 - **Player pages:** tap any name on the leaderboard, in admin or under "Your stats" on the phone page. You get `/player?id=N` with current Elo and rank, nights won, record and score %, peak Elo, current streak, best win, a rating-over-time chart (hover or arrow keys for each game), head-to-head against every opponent and the full game list.
 - **Past weeks and months:** use the **‹ Previous week / Next ›** arrows above the board, the ← / → keys, or swipe the board on a phone or tablet (swipe right to go back). Ratings show as they were at the end of that night or month. A new result jumps the screen back to tonight.
 - **Share a specific week or month:** browse to it, then copy the address. It updates as you step through, e.g. `/display?session=12` or `/display?month=2026-09`. Add `&clean` for an Instagram-ready card. The arrows are hidden in clean mode.
@@ -75,6 +75,18 @@ If you prefer paper, `/qr` prints the current QR on an A4 sheet. It only works u
 - **Phone tags.** Each game records a random ID for the phone that logged it. In **Admin → Recent games**, tap a phone tag to see everything that phone logged, then **Delete all from this phone** if it was pranking.
 - **One person, one player.** New players add a **first name and last initial**, for example "Rizak H". Capitals are tidied automatically. After someone adds or picks their name, their phone remembers it ("You're Rizak H on this phone"). Adding a name that looks like an existing player shows "Is one of these you?". That covers the same first name, small typos and accents. Exact repeats are never allowed. A second "Sam W" is asked to add another letter ("Sam Wh").
 - **Merge.** If a duplicate still slips in, open **Admin → Players → Merge…** on the extra entry and choose who to keep. Their games move across, the extra name is removed, and Elo is replayed. Two players who have played each other can't be merged.
+
+## Fair matchups
+
+Elo already makes farming weaker players pointless for ratings: a 1400 beating a 1000 gains about 3 points and risks about 29. These rules stop it paying off on the Tonight board and for ♚ titles too:
+
+- **Tonight ranks by rating gained, not wins.** One upset win (+29) beats ten easy wins (+3 each). The coloured number on the right is tonight's gain.
+- **Up to 3 games per opponent count each night.** That allows a best-of-3 decider. A 4th or later game against the same person still changes Elo, but doesn't count on the Tonight board. The phone says so after logging it, and the display shows "N repeat games not counted".
+- **Winning the night (♚) needs 3 different opponents.** If the player on top hasn't faced 3 people yet, the display says how many more they need. At the end of the night, the ♚ goes to the highest-placed player who has faced 3.
+- **Fair game suggestions.** After logging a game, the phone suggests a next opponent for each player: someone at the club tonight with a close rating, with people they haven't played yet first. Tap one to fill in both names. A phone that knows who you are also shows "Fair games for you tonight" above the add-your-name link.
+- **Repeat pairings in admin.** **Admin → Recent games** lists any pair who played more than 3 times in the latest session and tags the games that didn't count.
+
+Nights played before these rules arrived keep their old ranking (most wins) and their ♚ titles.
 
 ## Backups & downloads
 

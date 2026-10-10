@@ -11,9 +11,9 @@ function clubAt(iso) {
 test('nights won count the #1 of each finished club night', () => {
   // Default hours: Mondays 18:00–22:00 London (17:00–21:00 UTC in October)
   const { club, set } = clubAt('2026-09-28T17:30:00Z');
-  const a = club.addPlayer('Amara O'), b = club.addPlayer('Priya R'), c = club.addPlayer('Kenji M');
+  const a = club.addPlayer('Amara O'), b = club.addPlayer('Priya R'), c = club.addPlayer('Kenji M'), d = club.addPlayer('Dev P');
   club.startSession();
-  club.logGame(a.id, b.id, 1); club.logGame(a.id, c.id, 1);          // Amara wins night 1
+  club.logGame(a.id, b.id, 1); club.logGame(a.id, c.id, 1); club.logGame(a.id, d.id, 1); // Amara wins night 1
   // Night 1 still open: no title yet
   assert.strictEqual(club.tonightStandings().rows.find(r => r.name === 'Amara O').titles, 0);
   set('2026-09-28T21:30:00Z');                                       // after 22:00: night over
@@ -21,13 +21,13 @@ test('nights won count the #1 of each finished club night', () => {
 
   set('2026-10-05T17:30:00Z');
   club.startSession();
-  club.logGame(c.id, a.id, 1); club.logGame(c.id, b.id, 1);          // Kenji wins night 2
+  club.logGame(c.id, a.id, 1); club.logGame(c.id, b.id, 1); club.logGame(c.id, d.id, 1); // Kenji wins night 2
   set('2026-10-12T17:30:00Z');
   const s3 = club.startSession();
   club.logGame(a.id, b.id, 0.5);                                     // night 3: only a draw -> no winner
   set('2026-10-12T21:30:00Z');
   const titles = Object.fromEntries(club.monthStandings().rows.map(r => [r.name, r.titles]));
-  assert.deepStrictEqual(titles, { 'Kenji M': 1, 'Amara O': 1, 'Priya R': 0 }); // October board shows all-time counts
+  assert.deepStrictEqual(titles, { 'Kenji M': 1, 'Amara O': 1, 'Priya R': 0, 'Dev P': 0 }); // October board shows all-time counts
   assert.deepStrictEqual(club.nightWinners().map(w => w.player_id), [a.id, c.id]);
   // Past week shows counts as they stood then
   const list = club.listSessions();

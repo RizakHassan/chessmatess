@@ -82,6 +82,12 @@
     display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 10px 12px; margin-bottom: 8px; border-radius: var(--r-row); background: var(--sky-soft); font-size: 14px;
   }
+  .repeats {
+    padding: 10px 12px; margin-bottom: 8px; border-radius: var(--r-row); font-size: 14px;
+    background: rgba(254, 80, 45, .08); box-shadow: 0 0 0 1.5px rgba(254, 80, 45, .35) inset;
+  }
+  .repeats ul { margin: 6px 0 0; padding-left: 18px; }
+  .uncounted { display: inline-block; margin-left: 6px; font: 600 11px var(--mono); color: var(--orange); white-space: nowrap; }
   label.toggle { font-size: 14px; color: var(--text-2); font-weight: 500; display: flex; gap: 6px; align-items: center; cursor: pointer; }
   label.toggle input { accent-color: var(--slate); }
   .empty-row td { color: var(--muted); padding: 22px 8px; }
@@ -199,6 +205,7 @@
     <section class="panel">
       <h2>Recent games</h2>
       <p class="lead">Newest first, grouped by session. Tap a phone tag to see everything that phone logged.</p>
+      <div class="repeats" id="repeats" hidden></div>
       <div class="filter" id="deviceFilter" hidden></div>
       <div class="scroll">
         <table>
@@ -310,6 +317,7 @@
       : '<span class="muted">No games yet.</span>';
     document.getElementById('undo').disabled = !last;
     lastGames = games;
+    renderRepeats(games);
     const filterEl = document.getElementById('deviceFilter');
     if (deviceFilter) {
       const mine = games.filter(g => g.device_id === deviceFilter);
@@ -329,13 +337,30 @@
       return head + `
       <tr data-id="${g.id}">
         <td>${esc(g.p1_name)}</td>
-        <td class="res">${resText(g.result)}</td>
+        <td class="res">${resText(g.result)}${g.counted === false ? '<span class="uncounted" title="Elo still changed, but this pairing had already played 3 times that night">not counted</span>' : ''}</td>
         <td>${esc(g.p2_name)}</td>
         <td>${g.device_id ? `<button class="tag" data-device="${esc(g.device_id)}" title="Show games from this phone">${phoneTag(g.device_id)}</button>` : '<span class="muted">admin</span>'}</td>
         <td class="num hide-sm deltas">${signed(g.p1_delta)} / ${signed(g.p2_delta)}</td>
         <td class="act"><button class="btn danger small" data-act="delete" data-confirm="Delete?" aria-label="Delete game">Delete</button></td>
       </tr>`;
     }).join('') || `<tr class="empty-row"><td colspan="6">Games appear here as soon as someone logs one.</td></tr>`;
+  }
+
+  // Pairs who kept playing each other in the latest session (past the 3 games that count on the board).
+  function renderRepeats(games) {
+    const el = document.getElementById('repeats');
+    const latest = games[0]?.session_id;
+    const pairs = new Map();
+    for (const g of games.filter(g => g.session_id === latest)) {
+      const key = [g.p1_name, g.p2_name].sort().join(' & ');
+      const e = pairs.get(key) || { games: 0, uncounted: 0 };
+      e.games++; if (g.counted === false) e.uncounted++;
+      pairs.set(key, e);
+    }
+    const flagged = [...pairs].filter(([, e]) => e.uncounted).sort((a, b) => b[1].games - a[1].games);
+    el.hidden = !flagged.length;
+    el.innerHTML = `<b>Repeat pairings in ${esc(games[0]?.session_label || 'this session')}</b>
+      <ul>${flagged.map(([names, e]) => `<li>${esc(names)} played <b>${e.games}</b> times (${e.uncounted} not counted on the board)</li>`).join('')}</ul>`;
   }
 
   // Short, stable label for a phone's random id, e.g. "A4F2".

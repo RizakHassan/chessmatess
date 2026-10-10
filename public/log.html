@@ -108,6 +108,18 @@
   .done .line .elo { color: var(--muted); font-family: var(--mono); font-size: 15px; margin-right: 10px; }
   .done .btn { margin-top: 18px; width: 100%; padding: 15px; font-size: 17px; }
   .done .btn.undo { margin-top: 8px; padding: 12px; font-size: 15px; color: var(--down); }
+  /* fair next games */
+  .suggest { margin: 14px 0 0; }
+  .suggest p { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+  .suggest .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .suggest .opt {
+    display: inline-flex; align-items: baseline; gap: 8px; padding: 9px 14px; border: 0; border-radius: 999px; cursor: pointer;
+    background: var(--surface); box-shadow: 0 0 0 1.5px var(--line) inset; font: inherit; font-size: 15px; font-weight: 600; color: var(--text);
+  }
+  .suggest .opt:active { transform: scale(.97); }
+  .suggest .opt .num { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--muted); }
+  .done .suggest { margin-top: 18px; }
+  .done .note { margin: 14px 0 0; padding: 10px 12px; border-radius: var(--r-row); background: rgba(254, 80, 45, .08); font-size: 14px; color: var(--text); }
   .hint .link-btn { margin-left: 4px; color: var(--down); text-decoration-color: currentColor; }
 </style>
 </head>
@@ -162,6 +174,7 @@
 
     <section class="newbie">
       <p id="meLine" hidden>You're <b id="meName"></b> on this phone. <a class="link-btn" id="myStats" href="/player">Your stats</a> · <button class="link-btn" id="notMe" type="button">Not you?</button></p>
+      <div class="suggest" id="suggestMe" hidden></div>
       <p id="newLine">Not on the list? <button class="link-btn" id="newBtn" type="button">Add your name</button></p>
       <form id="newForm" hidden novalidate>
         <div class="name-row">
@@ -182,6 +195,8 @@
     <span class="saved">Saved to the leaderboard</span>
     <div class="big" id="doneTitle"></div>
     <div id="doneLines"></div>
+    <p class="note" id="doneNote" hidden></p>
+    <div class="suggest" id="doneNext" hidden></div>
     <button class="btn primary" id="again">Log another game</button>
     <button class="btn ghost undo" id="undoBtn" type="button" hidden>Wrong result? Undo</button>
   </section>
@@ -349,8 +364,8 @@
     document.querySelectorAll('.results .btn').forEach(b => b.disabled = true);
     hint.classList.remove('err'); hint.textContent = 'Saving…';
     try {
-      const { game } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result, allowDuplicate });
-      showDone(game);
+      const { game, next } = await post('/api/games', { p1: picked.c1, p2: picked.c2, result, allowDuplicate });
+      showDone(game, next || {});
     } catch (err) {
       refreshButtons();
       hint.classList.add('err');
@@ -366,13 +381,25 @@
   }
   document.querySelectorAll('.results .btn').forEach(btn => btn.addEventListener('click', () => submit(Number(btn.dataset.result))));
 
-  function showDone(g) {
+  // Fair next games: people here tonight with the closest rating, new opponents first.
+  const suggestHtml = (title, forId, list) => list?.length ? `<p>${esc(title)}</p><div class="opts">${list.map(s =>
+    `<button type="button" class="opt" data-a="${forId}" data-b="${s.id}">${esc(s.name)} <span class="num">${s.elo}</span></button>`).join('')}</div>` : '';
+  function fillSuggest(el, html) { el.innerHTML = html; el.hidden = !html; }
+
+  function showDone(g, next) {
     const d1 = Math.round(g.p1_delta), d2 = Math.round(g.p2_delta);
     const chip = n => `<span class="chip ${n > 0 ? 'up' : n < 0 ? 'down' : 'flat'}">${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}</span>`;
     const line = (name, elo, d) => `<div class="line"><span>${esc(name)}</span><span><span class="elo">${elo}</span>${chip(d)}</span></div>`;
     document.getElementById('doneTitle').textContent =
       g.result === 1 ? `${g.p1} beat ${g.p2}` : g.result === 0 ? `${g.p2} beat ${g.p1}` : `${g.p1} and ${g.p2} drew`;
     document.getElementById('doneLines').innerHTML = line(g.p1, g.p1_elo, d1) + line(g.p2, g.p2_elo, d2);
+    const note = document.getElementById('doneNote');
+    note.hidden = g.counted !== false;
+    note.textContent = `This counts for Elo, but not on tonight's board: you've played each other ${g.pair_games} times tonight and only the first 3 count. Try someone new!`;
+    const mine = me === g.p1_id || me === g.p2_id;
+    fillSuggest(document.getElementById('doneNext'), mine
+      ? suggestHtml('Fair next games for you', me, next[me])
+      : suggestHtml(`Next for ${g.p1}`, g.p1_id, next[g.p1_id]) + suggestHtml(`Next for ${g.p2}`, g.p2_id, next[g.p2_id]));
     document.getElementById('form').hidden = true;
     document.getElementById('done').classList.add('show');
     startUndo(g.id);
@@ -411,15 +438,34 @@
     }
   });
 
-  document.getElementById('again').addEventListener('click', () => {
+  function backToForm(a = null, b = null) {
     stopUndo();
-    document.getElementById('c1')._select(null);
-    document.getElementById('c2')._select(null);
+    document.getElementById('c1')._select(a);
+    document.getElementById('c2')._select(b);
     document.getElementById('done').classList.remove('show');
     document.getElementById('form').hidden = !loggingOpen;
     checkHours();
+    loadMySuggestions();
     window.scrollTo(0, 0);
+  }
+  document.getElementById('again').addEventListener('click', () => backToForm());
+  // Tapping a suggestion fills in both players, ready for the result.
+  for (const id of ['doneNext', 'suggestMe']) document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button[data-a]');
+    if (!b) return;
+    backToForm(Number(b.dataset.a), Number(b.dataset.b));
+    toast('Players picked. Tap the result when you’re done.');
   });
+
+  let suggestSeq = 0;
+  async function loadMySuggestions() {
+    const el = document.getElementById('suggestMe'), seq = ++suggestSeq;
+    if (!me || !loggingOpen) return fillSuggest(el, '');
+    try {
+      const list = await fetch('/api/suggest?player=' + me).then(r => r.json());
+      if (seq === suggestSeq) fillSuggest(el, suggestHtml('Fair games for you tonight', me, Array.isArray(list) ? list : []));
+    } catch {}
+  }
 
   /* ---------- who is this phone? ---------- */
   // Remembering the player stops people re-adding themselves under a new name next week.
@@ -440,7 +486,7 @@
     document.getElementById('newLine').hidden = !!p || !newForm.hidden;
     if (p) { document.getElementById('meName').textContent = p.name; document.getElementById('myStats').href = `/player?id=${p.id}`; }
   }
-  function setMe(id) { me = id; meStore.set(id); renderMe(); }
+  function setMe(id) { me = id; meStore.set(id); renderMe(); loadMySuggestions(); }
   function closeNewForm() {
     newFirst.value = ''; newInitial.value = ''; newErr.textContent = ''; similarBox.hidden = true; newForm.hidden = true; renderMe();
   }
@@ -498,6 +544,7 @@
     players = s.players;
     playersLoaded = true;
     renderMe();
+    loadMySuggestions(); // ratings and who's here change with every game
     for (const k of ['c1', 'c2']) {
       if (picked[k] && !byId(picked[k])) document.getElementById(k)._select(null);
       document.getElementById(k)._draw();

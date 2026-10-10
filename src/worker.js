@@ -198,6 +198,7 @@ export class Club extends DurableObject {
       const sessionMatch = path.match(/^\/api\/sessions\/(\d+)$/);
       if (sessionMatch && method === 'GET') return json(club.sessionStandings(Number(sessionMatch[1])));
       if (path === '/api/months' && method === 'GET') return json(club.listMonths());
+      if (path === '/api/suggest' && method === 'GET') return json(club.suggestOpponents(Number(url.searchParams.get('player'))));
       const playerMatch = path.match(/^\/api\/players\/(\d+)$/);
       if (playerMatch && method === 'GET') return json(club.playerStats(Number(playerMatch[1])));
       const monthMatch = path.match(/^\/api\/months\/(\d{4}-\d{2})$/);
@@ -225,7 +226,11 @@ export class Club extends DurableObject {
         club.requireLoggingOpen();
         const { p1, p2, result, allowDuplicate } = await body();
         const deviceId = request.headers.get('x-device-id');
-        return mutate(() => ({ game: club.logGame(p1, p2, result, { deviceId, allowDuplicate: allowDuplicate === true }) }));
+        return mutate(() => {
+          const game = club.logGame(p1, p2, result, { deviceId, allowDuplicate: allowDuplicate === true });
+          // Fair next games for both players, so the phone can nudge people towards even matchups.
+          return { game, next: { [game.p1_id]: club.suggestOpponents(game.p1_id), [game.p2_id]: club.suggestOpponents(game.p2_id) } };
+        });
       }
       const ownUndo = path.match(/^\/api\/games\/(\d+)\/undo$/);
       if (ownUndo && method === 'POST') {

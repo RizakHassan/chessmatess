@@ -236,7 +236,7 @@
     </nav>
     <div class="cols" aria-hidden="true"><div>#</div><div>Player</div><div class="c">W–D–L</div><div class="r">Elo</div><div class="r" id="colNight">Tonight</div></div>
     <div class="board" id="board-tonight"></div>
-    <div class="meta"><span id="tonightMeta"></span><span id="rankRule">Most wins tonight, Elo breaks ties</span></div>
+    <div class="meta"><span id="tonightMeta"></span><span id="rankRule">Ranked by rating gained tonight</span></div>
   </section>
 
   <section class="view month" id="view-month" aria-label="This month">
@@ -438,9 +438,21 @@
 
   function showTonight(t, past = null, quiet = !!past) {
     const n = t.gameCount;
-    document.getElementById('tonightMeta').textContent = n ? `${n} game${n === 1 ? '' : 's'} played${past ? ' that night' : ''}` : '';
+    const when = past ? 'that night' : 'tonight';
+    const notes = [];
+    if (n) notes.push(`${n} game${n === 1 ? '' : 's'} played${past ? ' that night' : ''}`);
+    if (t.uncounted) notes.push(`${t.uncounted} repeat game${t.uncounted === 1 ? '' : 's'} not counted`);
+    // The top of the board isn't always on course for the ♚: say why, so nobody is surprised at the end.
+    const top = t.rows[0];
+    if (!past && t.rule === 'gain' && top && top.w > 0 && t.leader_id !== top.id && top.opponents < t.titleMinOpponents) {
+      const more = t.titleMinOpponents - top.opponents;
+      notes.push(`${esc(top.name)} needs ${more} more opponent${more === 1 ? '' : 's'} for the ${KING}`);
+    }
+    document.getElementById('tonightMeta').innerHTML = notes.join(' · ');
     document.getElementById('colNight').textContent = past ? 'That night' : 'Tonight';
-    document.getElementById('rankRule').innerHTML = `Most wins ${past ? 'that night' : 'tonight'}, Elo breaks ties${legend(t.rows)}`;
+    document.getElementById('rankRule').innerHTML = t.rule === 'wins'
+      ? `Most wins ${when}, Elo breaks ties${legend(t.rows)}`
+      : `Ranked by rating gained ${when} · up to ${t.repeatLimit} games per opponent count · ${KING} needs ${t.titleMinOpponents}+ opponents`;
     renderBoard(document.getElementById('board-tonight'), t.rows, 'tonight',
       `<h3>No games yet tonight</h3><p>Scan the QR code with your phone to log a result. The board updates as soon as one comes in.</p>`,
       { quiet });
