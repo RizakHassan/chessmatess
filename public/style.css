@@ -62,6 +62,15 @@ body::before {
   background: repeating-conic-gradient(var(--slate) 0 25%, var(--sky) 0 50%) 0 0 / 24px 24px;
 }
 
+/* faint chessboard behind the content, fading in from the top (display, log and player pages) */
+body.checker::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: conic-gradient(var(--sky-soft) 25%, transparent 0 50%, var(--sky-soft) 0 75%, transparent 0) 0 0 / 96px 96px;
+  -webkit-mask-image: radial-gradient(ellipse 120% 70% at 50% 0%, transparent 35%, #000 100%);
+          mask-image: radial-gradient(ellipse 120% 70% at 50% 0%, transparent 35%, #000 100%);
+  opacity: .3;
+}
+
 button, input, select { font: inherit; color: inherit; }
 a { color: var(--slate); text-underline-offset: 3px; }
 h1, h2, h3 { text-wrap: balance; }

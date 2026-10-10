@@ -222,13 +222,6 @@
     .ticker { bottom: 16px; font-size: 15px; white-space: normal; width: calc(100vw - 32px); border-radius: 16px; }
   }
   /* ---------- Tonight: a podium for the top 3, everyone else in two columns ---------- */
-  body.page-display::after {
-    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-    background: conic-gradient(var(--sky-soft) 25%, transparent 0 50%, var(--sky-soft) 0 75%, transparent 0) 0 0 / 96px 96px;
-    -webkit-mask-image: radial-gradient(ellipse 120% 70% at 50% 0%, transparent 35%, #000 100%);
-            mask-image: radial-gradient(ellipse 120% 70% at 50% 0%, transparent 35%, #000 100%);
-    opacity: .3;
-  }
   .tonight .cols { display: none; }
   .tonight .board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 12px; align-items: end; }
   .tonight .board > .empty, .tonight .board > .skeleton { grid-column: 1 / -1; }
@@ -289,7 +282,7 @@
   }
 </style>
 </head>
-<body class="page-display">
+<body class="checker">
 <div class="ticker" id="ticker" role="status" aria-live="polite"></div>
 
 <main class="wrap">

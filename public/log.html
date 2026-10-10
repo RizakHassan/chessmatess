@@ -13,18 +13,21 @@
   .top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
   .top .logo { width: 56px; height: 56px; flex: none; }
   .top .wordmark { font-size: 15px; line-height: 1; }
-  h1 { font-size: 30px; margin: 4px 0 0; letter-spacing: -0.03em; line-height: 1.05; }
+  h1 { font-size: 36px; margin: 4px 0 0; letter-spacing: -0.035em; line-height: 1; }
   .lead { margin: 0 0 18px; color: var(--text-2); font-size: 16px; }
 
-  .match {
-    background: var(--surface); border-radius: var(--r-container); padding: 18px;
-    box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
-  }
-  .field > label { display: flex; align-items: center; gap: 8px; }
+  /* the two sides of the board: a light card for White, a slate card for Black, an orange VS square between */
+  .match .field { position: relative; padding: 16px 16px 22px; border-radius: var(--r-container); }
+  .match .field.side-white { background: var(--surface); box-shadow: 0 0 0 1px var(--line) inset, inset 0 -6px 0 var(--sky), var(--shadow); }
+  .match .field.side-black { background: var(--slate); color: var(--cream); box-shadow: inset 0 -6px 0 var(--orange), 0 22px 34px -22px rgba(65, 96, 114, .9); }
+  .match .field.side-black > label { color: var(--cream); }
+  .match .field.side-black .input { color: var(--ink); }
+  .match .field.side-black .input::placeholder { color: var(--muted); }
+  .field > label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 750; letter-spacing: .01em; margin-bottom: 10px; }
   /* little pawns mark the colours (squares looked like checkboxes) */
-  .pawn { width: 18px; height: 18px; flex: none; }
-  .pawn.white { fill: var(--cream); stroke: var(--slate); stroke-width: 1.4; stroke-linejoin: round; }
-  .pawn.black { fill: var(--ink); }
+  .pawn { width: 26px; height: 26px; padding: 3px; border-radius: 6px; flex: none; }
+  .pawn.white { background: var(--sky-soft); fill: #fff; stroke: var(--slate); stroke-width: 1.4; stroke-linejoin: round; }
+  .pawn.black { background: var(--cream); fill: var(--ink); }
 
   .combo { position: relative; }
   .combo .input { font-size: 18px; padding: 14px 46px 14px 14px; }
@@ -54,19 +57,27 @@
   .list .none { padding: 14px 12px; color: var(--muted); font-size: 15px; }
 
   .vs {
-    display: flex; align-items: center; gap: 12px; margin: 12px 0;
-    font-family: var(--mono); font-weight: 800; text-transform: uppercase; color: var(--orange); font-size: 14px;
+    position: relative; z-index: var(--z-raised); display: grid; place-items: center; width: 46px; height: 46px; margin: -14px auto;
+    border-radius: 10px; background: var(--orange); color: var(--ink); box-shadow: 0 0 0 4px var(--cream);
+    font-family: var(--mono); font-weight: 800; text-transform: uppercase; font-size: 15px;
   }
-  .vs::before, .vs::after { content: ""; flex: 1; height: 1.5px; background: var(--line); }
 
-  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
-  .results .btn { padding: 18px 12px; font-size: 17px; font-weight: 700; border-radius: var(--r-row); min-width: 0; }
-  .results .win { flex-direction: column; gap: 2px; padding: 14px 12px; background: var(--slate); color: var(--cream); border-color: var(--slate); }
-  .results .win:not(:disabled):hover { background: var(--slate-deep); border-color: var(--slate-deep); }
-  .results .win:disabled { background: var(--surface-2); color: var(--muted); border-color: var(--line); }
-  .results .win b { font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .results .win small { font-size: 13px; font-weight: 550; opacity: .75; }
-  .results .draw { grid-column: 1 / -1; order: 3; padding: 14px; color: var(--slate); font-weight: 650; }
+  /* result buttons match the sides: light for White, slate for Black, a chessboard strip for a draw */
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  .results .btn { padding: 18px 12px; font-size: 17px; font-weight: 700; border-radius: var(--r-container); min-width: 0; }
+  .results .win { flex-direction: column; gap: 2px; padding: 20px 12px 24px; }
+  .results .win[data-result="1"] { background: var(--surface); color: var(--ink); border-color: var(--line-strong); box-shadow: inset 0 -6px 0 var(--sky); }
+  .results .win[data-result="1"]:not(:disabled):hover { background: var(--sky-soft); }
+  .results .win[data-result="0"] { background: var(--slate); color: var(--cream); border-color: var(--slate); box-shadow: inset 0 -6px 0 var(--orange); }
+  .results .win[data-result="0"]:not(:disabled):hover { background: var(--slate-deep); border-color: var(--slate-deep); }
+  .results .win:disabled { background: var(--surface-2); color: var(--muted); border-color: var(--line); box-shadow: none; }
+  .results .win b { font-size: 19px; font-weight: 750; letter-spacing: -0.01em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .results .win small { font-size: 13px; font-weight: 600; opacity: .75; text-transform: uppercase; letter-spacing: .06em; }
+  .results .draw {
+    grid-column: 1 / -1; order: 3; padding: 16px; color: var(--slate); font-weight: 750; font-size: 17px;
+    background: var(--surface) repeating-conic-gradient(var(--sky-soft) 0 25%, transparent 0 50%) 0 0 / 20px 20px;
+  }
+  .results .draw:disabled { background: var(--surface-2); }
   .hint { color: var(--muted); font-size: 14px; margin: 12px 2px 0; min-height: 1.3em; }
   .hint.err { color: var(--down); }
 
@@ -126,11 +137,15 @@
   .suggest .opt:active { transform: scale(.97); }
   .suggest .opt .num { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--muted); }
   .done .suggest { margin-top: 18px; }
+  .done { box-shadow: 0 0 0 1px var(--line) inset, inset 0 -6px 0 var(--orange), var(--shadow); padding-bottom: 26px; }
+  .done .big { font-size: 30px; letter-spacing: -0.03em; line-height: 1.1; }
+  .done .line .chip { font-size: 17px; padding: 4px 12px; }
+  .suggest .opt { border-radius: 10px; box-shadow: 0 0 0 1.5px var(--line) inset, inset 0 -3px 0 var(--sky); }
   .done .note { margin: 14px 0 0; padding: 10px 12px; border-radius: var(--r-row); background: rgba(254, 80, 45, .08); font-size: 14px; color: var(--text); }
   .hint .link-btn { margin-left: 4px; color: var(--down); text-decoration-color: currentColor; }
 </style>
 </head>
-<body>
+<body class="checker">
 <main class="wrap">
   <div class="top">
     <img class="logo" src="/logo.png" alt="Chessmatess logo">
@@ -153,7 +168,7 @@
 
   <div id="form">
     <section class="match">
-      <div class="field">
+      <div class="field side-white">
         <label for="p1"><svg class="pawn white" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6.2" r="3.3"/><path d="M9 11h6c0 1.3-.7 2.2-1.6 2.8L14.6 19H9.4l1.2-5.2C9.7 13.2 9 12.3 9 11z"/><rect x="6.5" y="19" width="11" height="3" rx="1.5"/></svg>White</label>
         <div class="combo" id="c1">
           <input class="input" id="p1" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
@@ -162,7 +177,7 @@
         </div>
       </div>
       <div class="vs">vs</div>
-      <div class="field">
+      <div class="field side-black">
         <label for="p2"><svg class="pawn black" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6.2" r="3.3"/><path d="M9 11h6c0 1.3-.7 2.2-1.6 2.8L14.6 19H9.4l1.2-5.2C9.7 13.2 9 12.3 9 11z"/><rect x="6.5" y="19" width="11" height="3" rx="1.5"/></svg>Black</label>
         <div class="combo" id="c2">
           <input class="input" id="p2" placeholder="Search a name" autocomplete="off" autocapitalize="words" role="combobox" aria-expanded="false">
