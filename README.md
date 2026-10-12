@@ -83,7 +83,7 @@ Elo already makes farming weaker players pointless for ratings: a 1400 beating a
 
 - **Tonight ranks by rating gained, not wins.** One upset win (+29) beats ten easy wins (+3 each). The coloured number on the right is tonight's gain.
 - **Up to 3 games per opponent count each night.** That allows a best-of-3 decider. A 4th or later game against the same person still changes Elo, but doesn't count on the Tonight board. The phone says so after logging it, and the display shows "N repeat games not counted".
-- **Winning the night (♚) needs 3 different opponents.** If the player on top hasn't faced 3 people yet, the display says how many more they need. At the end of the night, the ♚ goes to the highest-placed player who has faced 3.
+- **Winning the night (♚) needs 3 different opponents.** During the night, the player currently in line for it carries an outlined **♚ on course** badge. If the player on top hasn't faced 3 people yet, the display says how many more they need. At the end of the night, the ♚ goes to the highest-placed player who has faced 3.
 - **Fair game suggestions.** After logging a game, the phone suggests a next opponent for each player: someone at the club tonight with a close rating, with people they haven't played yet first. Tap one to fill in both names. A phone that knows who you are also shows "Fair games for you tonight" above the add-your-name link.
 - **Repeat pairings in admin.** **Admin → Recent games** lists any pair who played more than 3 times in the latest session and tags the games that didn't count.
 
