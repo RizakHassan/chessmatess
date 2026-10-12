@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="A ready-to-post Instagram image of a Chessmatess club night.">
+<title>Instagram image · Chessmatess</title>
+<link rel="icon" href="/favicon.png" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 620px; margin: 0 auto; padding: 22px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+  .brand .logo { width: 44px; height: 44px; }
+  .brand h1 { margin: 2px 0 0; font-size: 24px; letter-spacing: -0.03em; line-height: 1.05; }
+  .brand .wordmark { font-size: 14px; }
+  .pick { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .pick label { font-size: 14px; font-weight: 650; color: var(--text-2); white-space: nowrap; }
+  .pick select { flex: 1; min-width: 0; }
+  .preview {
+    display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; border-radius: var(--r-container);
+    background: var(--surface-2); box-shadow: 0 0 0 1px var(--line) inset, var(--shadow);
+  }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .actions .btn { padding: 15px; font-size: 16px; font-weight: 750; justify-content: center; }
+  .actions .share { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+  .actions .share:hover { background: #ff6a49; border-color: #ff6a49; }
+  .tip { margin: 12px 2px 0; font-size: 14px; color: var(--muted); }
+  .empty { padding: 40px 20px; text-align: center; color: var(--text-2); }
+</style>
+</head>
+<body class="checker">
+<main class="wrap">
+  <header>
+    <a class="brand" href="/display"><img class="logo" src="/logo.png" alt="Chessmatess logo"><div><span class="wordmark">Chessmatess</span><h1>Instagram image</h1></div></a>
+    <a class="btn ghost small" href="/display">← Leaderboard</a>
+  </header>
+
+  <div class="pick">
+    <label for="week">Club night</label>
+    <select class="input" id="week" aria-label="Club night"></select>
+  </div>
+
+  <img class="preview" id="preview" alt="Instagram post of the club night results">
+  <div class="empty" id="empty" hidden>No games logged yet. Once a club night has results, its image appears here.</div>
+
+  <div class="actions" id="actions">
+    <button class="btn share" id="shareBtn" type="button">Share…</button>
+    <a class="btn" id="saveBtn" download="chessmatess.png">Download image</a>
+  </div>
+  <p class="tip">Portrait 1080 × 1350, the size Instagram shows in the feed. On a phone, <b>Share…</b> opens Instagram straight away, or press and hold the image to save it to Photos.</p>
+</main>
+<footer class="site-foot">Designed by <a href="https://rizak.dev" target="_blank" rel="noopener">rizak.dev</a></footer>
+
+<script>
+(() => {
+  // Brand colours, kept in step with style.css.
+  const C = {
+    cream: '#fffcf0', sky: '#a7dcfa', skySoft: '#dcf0fc', slate: '#416072', slateDeep: '#33505f',
+    orange: '#fe502d', ink: '#22271e', muted: '#586e7a', text2: '#3d4a52', line: 'rgba(65,96,114,.16)',
+    up: '#16824a', upWash: '#dcf2e4', down: '#cc2639', downWash: '#fbe1e3', upOnSlate: '#9ff0bf', downOnSlate: '#ffb3bb',
+  };
+  const SANS = '"Geist Variable", system-ui, sans-serif', MONO = '"Geist Mono Variable", ui-monospace, monospace';
+  const KING = '♚︎';
+  const W = 1080, H = 1350, PAD = 72;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+
+  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
+  const wdl = r => `${r.w}–${r.d}–${r.l}`;
+
+  function rrect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  // Largest font size (down to `min`) at which the text fits `maxW`, then ellipsis if still too long.
+  function fit(ctx, text, maxW, size, min, weight, family) {
+    for (; size > min; size -= 2) { ctx.font = `${weight} ${size}px ${family}`; if (ctx.measureText(text).width <= maxW) return text; }
+    ctx.font = `${weight} ${min}px ${family}`;
+    while (text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+    return ctx.measureText(text).width <= maxW ? text : text + '…';
+  }
+  function chip(ctx, text, xRight, yMid, size, bg, fg) {
+    ctx.font = `800 ${size}px ${MONO}`;
+    const w = ctx.measureText(text).width + size * 1.1, h = size * 1.6;
+    rrect(ctx, xRight - w, yMid - h / 2, w, h, h / 2); ctx.fillStyle = bg; ctx.fill();
+    ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, xRight - w / 2, yMid + 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  let logo = null;
+  const logoReady = new Promise(res => { const img = new Image(); img.onload = () => { logo = img; res(); }; img.onerror = res; img.src = '/logo.png'; });
+  const fontsReady = Promise.all([
+    document.fonts.load(`800 40px ${SANS}`), document.fonts.load(`600 40px ${SANS}`),
+    document.fonts.load(`800 40px ${MONO}`), document.fonts.load(`600 40px ${MONO}`),
+  ]).catch(() => {});
+
+  function draw(night) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const rows = night.rows;
+    const live = night.current && night.open;
+    // The night's ♚ (or, while it's still being played, who is on course for it).
+    const winner = rows.find(r => r.id === night.leader_id) || rows[0];
+    const rest = rows.filter(r => r !== winner);
+
+    // background, checker strip and a faint board fading in towards the bottom
+    ctx.fillStyle = C.cream; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    for (let y = 640; y < H; y += 90) for (let x = ((y / 90) % 2) * 90; x < W; x += 180) {
+      ctx.globalAlpha = 0.35 * Math.min(1, (y - 640) / 500); ctx.fillStyle = C.skySoft; ctx.fillRect(x, y, 90, 90);
+    }
+    ctx.restore();
+    for (let x = 0, i = 0; x < W; x += 24, i++) { ctx.fillStyle = i % 2 ? C.sky : C.slate; ctx.fillRect(x, 0, 24, 24); }
+
+    // header
+    if (logo) { ctx.save(); rrect(ctx, PAD, 74, 104, 104, 18); ctx.clip(); ctx.drawImage(logo, PAD, 74, 104, 104); ctx.restore(); }
+    ctx.fillStyle = C.orange; ctx.font = `800 58px ${MONO}`; ctx.fillText('CHESSMATESS', PAD + 132, 126);
+    ctx.fillStyle = C.slate;
+    ctx.fillText(fit(ctx, night.session.label, W - PAD * 2 - 132, 34, 24, 600, SANS), PAD + 132, 170);
+
+    // winner card
+    const cx = PAD, cy = 236, cw = W - PAD * 2, ch = 372;
+    ctx.save(); ctx.shadowColor = 'rgba(65,96,114,.45)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26;
+    rrect(ctx, cx, cy, cw, ch, 40); ctx.fillStyle = C.slate; ctx.fill(); ctx.restore();
+    ctx.save(); rrect(ctx, cx, cy, cw, ch, 40); ctx.clip(); ctx.fillStyle = C.orange; ctx.fillRect(cx, cy + ch - 16, cw, 16); ctx.restore();
+    // label tile
+    const label = live ? `${KING}  ON COURSE` : night.leader_id ? `${KING}  NIGHT WINNER` : 'TOP OF THE NIGHT';
+    ctx.font = `800 30px ${MONO}`;
+    const lw = ctx.measureText(label).width + 44;
+    rrect(ctx, cx + 40, cy + 40, lw, 60, 14); ctx.fillStyle = C.orange; ctx.fill();
+    ctx.fillStyle = C.ink; ctx.textBaseline = 'middle'; ctx.fillText(label, cx + 62, cy + 72); ctx.textBaseline = 'alphabetic';
+    // gain
+    const big = night.rule === 'wins' ? `${winner.w} win${winner.w === 1 ? '' : 's'}` : signed(winner.delta);
+    ctx.font = `800 92px ${MONO}`; ctx.textAlign = 'right';
+    ctx.fillStyle = night.rule === 'wins' ? C.cream : winner.delta >= 0 ? C.upOnSlate : C.downOnSlate;
+    ctx.fillText(big, cx + cw - 44, cy + 112); ctx.textAlign = 'left';
+    // name and line under it
+    ctx.fillStyle = C.cream;
+    ctx.fillText(fit(ctx, winner.name, cw - 88, 132, 64, 800, SANS), cx + 40, cy + 268);
+    ctx.fillStyle = C.sky; ctx.font = `600 34px ${SANS}`;
+    const bits = [`${wdl(winner)} W–D–L`, `${winner.elo} Elo`];
+    if (winner.opponents) bits.push(`${winner.opponents} opponents`);
+    if (winner.titles) bits.push(`${KING} ${winner.titles} night${winner.titles === 1 ? '' : 's'} won`);
+    ctx.fillText(bits.join('  ·  '), cx + 42, cy + 326);
+
+    // everyone else (as many as fit)
+    const rowH = 86, gap = 12, top = 656, bottom = H - 120;
+    const fitsRows = Math.floor((bottom - top + gap) / (rowH + gap));
+    const shown = rest.slice(0, fitsRows);
+    shown.forEach((r, i) => {
+      const y = top + i * (rowH + gap), rank = rows.indexOf(r) + 1;
+      rrect(ctx, PAD, y, W - PAD * 2, rowH, 20); ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
+      // rank square, alternating like a chessboard
+      const dark = rank % 2 === 0;
+      rrect(ctx, PAD + 16, y + 15, 56, 56, 10); ctx.fillStyle = dark ? C.slate : C.skySoft; ctx.fill();
+      ctx.fillStyle = dark ? C.cream : C.slate; ctx.font = `800 28px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(rank), PAD + 44, y + 44); ctx.textAlign = 'left';
+      // name, W-D-L, gain
+      ctx.fillStyle = C.ink;
+      ctx.fillText(fit(ctx, r.name, 470, 40, 26, 700, SANS), PAD + 96, y + 45);
+      ctx.fillStyle = C.muted; ctx.font = `600 30px ${MONO}`; ctx.textAlign = 'right';
+      ctx.fillText(wdl(r), W - PAD - 190, y + 45); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      const d = night.rule === 'wins' ? r.w : r.delta;
+      const text = night.rule === 'wins' ? `${r.w}W` : signed(r.delta);
+      chip(ctx, text, W - PAD - 20, y + rowH / 2, 30, d > 0 ? C.upWash : d < 0 ? C.downWash : '#eceae0', d > 0 ? C.up : d < 0 ? C.down : C.muted);
+    });
+
+    // footer
+    const fy = H - 58;
+    ctx.fillStyle = C.text2; ctx.font = `600 30px ${SANS}`;
+    const more = rest.length - shown.length;
+    ctx.fillText(`${rows.length} players · ${night.gameCount} games${more > 0 ? ` · +${more} more` : ''}`, PAD, fy);
+    ctx.fillStyle = C.orange; ctx.font = `800 32px ${MONO}`; ctx.textAlign = 'right';
+    ctx.fillText(location.host.replace(/^www\./, ''), W - PAD, fy); ctx.textAlign = 'left';
+    return cv;
+  }
+
+  let blob = null, fileName = 'chessmatess.png';
+  async function show(id) {
+    const [night, hours] = await Promise.all([
+      fetch('/api/sessions/' + id).then(r => r.json()),
+      fetch('/api/hours').then(r => r.json()).catch(() => ({ open: false })),
+      fontsReady, logoReady,
+    ]);
+    night.open = hours.open;
+    const has = night.rows && night.rows.length;
+    $('empty').hidden = !!has; $('preview').hidden = !has; $('actions').hidden = !has;
+    if (!has) return;
+    const cv = draw(night);
+    blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    const url = URL.createObjectURL(blob);
+    $('preview').src = url;
+    fileName = `chessmatess-${new Date(night.session.created_at).toISOString().slice(0, 10)}.png`;
+    $('saveBtn').href = url; $('saveBtn').download = fileName;
+    history.replaceState(null, '', `?session=${id}`);
+  }
+
+  $('shareBtn').addEventListener('click', async () => {
+    if (!blob) return;
+    const file = new File([blob], fileName, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Chessmatess club night' }); } catch { /* cancelled */ }
+    } else $('saveBtn').click();
+  });
+
+  (async () => {
+    const sessions = (await fetch('/api/sessions').then(r => r.json())).filter(s => s.games > 0);
+    if (!sessions.length) { $('empty').hidden = false; $('preview').hidden = true; $('actions').hidden = true; $('week').disabled = true; return; }
+    $('week').innerHTML = sessions.map(s => `<option value="${s.id}">${s.label.replace(/[<&]/g, '')}${s.current ? ' (this week)' : ''}</option>`).join('');
+    const wanted = Number(params.get('session'));
+    if (sessions.some(s => s.id === wanted)) $('week').value = String(wanted);
+    $('week').addEventListener('change', () => show($('week').value));
+    show($('week').value);
+  })();
+})();
+</script>
+</body>
+</html>

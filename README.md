@@ -11,6 +11,7 @@ It runs on **Cloudflare** with nothing to keep switched on. A Worker serves the 
 | `/display` | Projector view. **Tonight** ranks players by rating gained this session, with Elo as the tiebreaker (see [Fair matchups](#fair-matchups)). **This month** ranks by Elo with monthly W-D-L, laid out for an Instagram screenshot. Anyone can view it. A **Log a game** button in the header opens `/log`. |
 | `/log` | Mobile page opened from the club QR code. Pick two players and tap who won, or **Draw**. New people tap **Add your name**. Logging only works with the club code that the QR carries. |
 | `/admin` | Needs the admin PIN. Add, rename, remove or restore players. Undo or delete a mis-logged game, which recalculates Elo. Start a new session. Change the club code. Download or restore an export. |
+| `/share` | Instagram image of a club night: a 1080 × 1350 portrait post with the night's ♚ winner and everyone's results. Pick the week, then **Share…** (opens Instagram on a phone) or **Download image**. Linked from admin. |
 | `/qr` | Printable A4 sheet with the QR code. It needs the admin PIN, because the QR contains the club code. |
 
 ## Deploy to Cloudflare (one-time setup)
