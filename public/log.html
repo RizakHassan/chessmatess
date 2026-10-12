@@ -44,6 +44,7 @@
     background: var(--surface); border-radius: var(--r-row); padding: 4px;
     box-shadow: 0 0 0 1.5px var(--line-strong) inset, 0 24px 44px -16px rgba(65,96,114,.55);
     max-height: 46dvh; overflow-y: auto; display: none;
+    color: var(--ink); /* the Black card has light text; the list must not inherit it */
   }
   .combo.open .list { display: block; animation: drop .18s var(--ease-out); }
   @keyframes drop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
