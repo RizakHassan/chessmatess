@@ -349,6 +349,21 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     }
   }
 
+  // Gone for good: the player and every game they played, then Elo is replayed without those games
+  // (their opponents' ratings and past ♚ titles can change). Only for players already removed.
+  function deletePlayerForever(id) {
+    id = Number(id);
+    return sql.transaction(() => {
+      const p = one('SELECT * FROM players WHERE id = ?', id);
+      if (!p) throw new Error('Player not found');
+      if (p.active) throw new Error(`Remove ${p.name} first, then delete them permanently.`);
+      const games = sql.all('DELETE FROM games WHERE p1_id = ? OR p2_id = ? RETURNING id', id, id).length;
+      sql.all('DELETE FROM players WHERE id = ?', id);
+      recalculate();
+      return { name: p.name, games };
+    });
+  }
+
   function restorePlayer(id) {
     const p = one('SELECT * FROM players WHERE id = ?', id);
     if (!p) throw new Error('Player not found');
@@ -900,7 +915,7 @@ export function createClub(sql, { timeZone = 'Europe/London', clock = () => new 
     getSetting, setSetting, getHours, setHours, loggingStatus, requireLoggingOpen, nextEvents, autoStartSession,
     saveBackup, listBackups, getBackup, restoreBackup,
     currentSession, startSession,
-    listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer,
+    listPlayers, addPlayer, similarPlayers, mergePlayers, renamePlayer, removePlayer, restorePlayer, deletePlayerForever,
     logGame, deleteGame, undoLastGame, undoOwnGame, deleteGamesByDevice, recalculate, recentGames, suggestOpponents,
     tonightStandings, monthStandings, snapshot, nightWinners, playerStats, listSessions, sessionStandings, listMonths, monthStandingsFor,
     exportData, importData, spreadsheetSheets,

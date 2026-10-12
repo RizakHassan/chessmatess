@@ -313,7 +313,7 @@
         <td class="num">${Math.round(p.elo)}</td>
         <td class="act">${p.active
           ? `<button class="btn ghost small" data-act="rename">Rename</button><button class="btn ghost small" data-act="merge" title="Same person entered twice? Move their games onto the other entry">Merge…</button><button class="btn danger small" data-act="remove" data-confirm="Remove?">Remove</button>`
-          : `<button class="btn small" data-act="restore">Restore</button>`}</td>
+          : `<button class="btn small" data-act="restore">Restore</button><button class="btn ghost small" data-act="merge" title="Duplicate of someone? Move their games onto the other entry">Merge…</button><button class="btn danger small" data-act="forever" data-confirm="Delete forever?" title="Deletes this player and all their games, then recalculates Elo. A backup is saved first.">Delete permanently</button>`}</td>
       </tr>`).join('') || `<tr class="empty-row"><td colspan="3">No players yet. Add the first one above, or people can add themselves from the log page.</td></tr>`;
   }
 
@@ -555,6 +555,11 @@
       await api('DELETE', `/players/${id}`); toast(`${name} removed. Their past games still count.`);
     }
     if (act === 'restore') { await api('POST', `/players/${id}/restore`); toast(`${name} restored`); }
+    if (act === 'forever') {
+      if (!armed(btn)) return;
+      const out = await api('DELETE', `/players/${id}/forever`);
+      toast(`${out.name} deleted with ${out.games} game${out.games === 1 ? '' : 's'}. Elo recalculated. A backup was saved first.`);
+    }
     await load();
   }));
 

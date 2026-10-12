@@ -145,3 +145,27 @@ test('"Rizak H" still triggers "Is this you?" against an existing "Rizak"', asyn
   assert.throws(() => club.addPlayer(personName('sam', 'w')), e => e.exact === true);
   assert.strictEqual(club.addPlayer(personName('sam', 'wh'), { force: true }).name, 'Sam Wh');
 });
+
+test('a removed player can be deleted permanently, with their games, and Elo is replayed', () => {
+  const { club } = memoryClub();
+  const a = club.addPlayer('Amara O'), b = club.addPlayer('Priya R'), junk = club.addPlayer('Test X');
+  club.logGame(junk.id, a.id, 1);
+  club.logGame(a.id, b.id, 1);
+  assert.throws(() => club.deletePlayerForever(junk.id), /Remove Test X first/);
+  club.removePlayer(junk.id);
+  assert.deepStrictEqual(club.deletePlayerForever(junk.id), { name: 'Test X', games: 1 });
+  assert.ok(!club.listPlayers({ includeRemoved: true }).some(p => p.name === 'Test X'));
+  assert.strictEqual(club.recentGames().length, 1);
+  // Amara's rating is as if the junk game never happened: one win against an equal player
+  assert.strictEqual(Math.round(club.listPlayers().find(p => p.name === 'Amara O').elo), 1016);
+  assert.throws(() => club.deletePlayerForever(junk.id), /not found/);
+});
+
+test('a removed duplicate can still be merged into the real player', () => {
+  const { club } = memoryClub();
+  const real = club.addPlayer('Rizak H'), dup = club.addPlayer('Rizak Ha', { force: true }), b = club.addPlayer('Priya R');
+  club.logGame(dup.id, b.id, 1);
+  club.removePlayer(dup.id);
+  assert.strictEqual(club.mergePlayers(real.id, dup.id).moved, 1);
+  assert.strictEqual(club.tonightStandings().rows.find(r => r.name === 'Rizak H').w, 1);
+});

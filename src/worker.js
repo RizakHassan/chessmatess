@@ -244,6 +244,10 @@ export class Club extends DurableObject {
         this.requireAdmin(request);
         const sub = path.slice('/api/admin'.length);
         const idMatch = sub.match(/^\/(players|games)\/(\d+)(\/restore)?$/);
+        const forever = sub.match(/^\/players\/(\d+)\/forever$/);
+        if (forever && method === 'DELETE') {
+          return mutate(() => { club.saveBackup('Before permanently deleting a player'); return club.deletePlayerForever(Number(forever[1])); });
+        }
         const id = idMatch ? Number(idMatch[2]) : null;
 
         if (sub === '/check' && method === 'POST') return json({ ok: true });
