@@ -97,7 +97,10 @@ export class Club extends DurableObject {
       // Tonight's session starts by itself, with a fresh QR code.
       if (club.autoStartSession()) { this.rotateClubCode(); changed = true; }
     }
-    if (due.close && due.close <= soon) club.saveBackup('After club night', { ifChanged: true });
+    if (due.close && due.close <= soon) {
+      club.saveBackup('After club night', { ifChanged: true });
+      changed = true; // the night is over: open screens need the new ♚ and the "closed" state
+    }
     if (changed) this.broadcast();
     await this.schedule();
   }
