@@ -141,33 +141,44 @@
     // name and line under it
     ctx.fillStyle = C.cream;
     ctx.fillText(fit(ctx, winner.name, cw - 88, 132, 64, 800, SANS), cx + 40, cy + 268);
-    ctx.fillStyle = C.sky; ctx.font = `600 34px ${SANS}`;
+    // Details under the name: drop the least important ones, then shrink, until they fit the card.
+    ctx.fillStyle = C.sky;
     const bits = [`${wdl(winner)} W–D–L`, `${winner.elo} Elo`];
     if (winner.opponents) bits.push(`${winner.opponents} opponents`);
     if (winner.titles) bits.push(`${KING} ${winner.titles} night${winner.titles === 1 ? '' : 's'} won`);
-    ctx.fillText(bits.join('  ·  '), cx + 42, cy + 326);
+    const maxLine = cw - 84;
+    let line = bits.join('  ·  ');
+    ctx.font = `600 34px ${SANS}`;
+    while (bits.length > 2 && ctx.measureText(line).width > maxLine) { bits.splice(2, 1); line = bits.join('  ·  '); }
+    ctx.fillText(fit(ctx, line, maxLine, 34, 24, 600, SANS), cx + 42, cy + 326);
 
     // everyone else (as many as fit)
-    const rowH = 86, gap = 12, top = 656, bottom = H - 120;
-    const fitsRows = Math.floor((bottom - top + gap) / (rowH + gap));
-    const shown = rest.slice(0, fitsRows);
+    // Rows shrink (down to a readable minimum) so a busy night shows as many players as possible.
+    const top = 652, bottom = H - 112, MAX_ROW = 86, MIN_ROW = 52;
+    const gapFor = h => Math.round(h * 0.14);
+    const maxRows = Math.floor((bottom - top + gapFor(MIN_ROW)) / (MIN_ROW + gapFor(MIN_ROW)));
+    const shown = rest.slice(0, maxRows);
+    const n = Math.max(shown.length, 1);
+    const rowH = Math.max(MIN_ROW, Math.min(MAX_ROW, Math.floor((bottom - top) / (n + (n - 1) * 0.14))));
+    const gap = gapFor(rowH), k = rowH / MAX_ROW; // k scales text and squares with the row
     shown.forEach((r, i) => {
       const y = top + i * (rowH + gap), rank = rows.indexOf(r) + 1;
-      rrect(ctx, PAD, y, W - PAD * 2, rowH, 20); ctx.fillStyle = '#ffffff'; ctx.fill();
+      rrect(ctx, PAD, y, W - PAD * 2, rowH, 20 * k); ctx.fillStyle = '#ffffff'; ctx.fill();
       ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
       // rank square, alternating like a chessboard
       const dark = rank % 2 === 0;
-      rrect(ctx, PAD + 16, y + 15, 56, 56, 10); ctx.fillStyle = dark ? C.slate : C.skySoft; ctx.fill();
-      ctx.fillStyle = dark ? C.cream : C.slate; ctx.font = `800 28px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(rank), PAD + 44, y + 44); ctx.textAlign = 'left';
+      const sq = Math.round(56 * k), mid = y + rowH / 2;
+      rrect(ctx, PAD + 16, mid - sq / 2, sq, sq, 10 * k); ctx.fillStyle = dark ? C.slate : C.skySoft; ctx.fill();
+      ctx.fillStyle = dark ? C.cream : C.slate; ctx.font = `800 ${Math.max(22, Math.round(28 * k))}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(rank), PAD + 16 + sq / 2, mid + 1); ctx.textAlign = 'left';
       // name, W-D-L, gain
       ctx.fillStyle = C.ink;
-      ctx.fillText(fit(ctx, r.name, 470, 40, 26, 700, SANS), PAD + 96, y + 45);
-      ctx.fillStyle = C.muted; ctx.font = `600 30px ${MONO}`; ctx.textAlign = 'right';
-      ctx.fillText(wdl(r), W - PAD - 190, y + 45); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(fit(ctx, r.name, 470, Math.max(31, Math.round(40 * k)), 24, 700, SANS), PAD + 40 + sq, mid + 1);
+      ctx.fillStyle = C.muted; ctx.font = `600 ${Math.max(25, Math.round(30 * k))}px ${MONO}`; ctx.textAlign = 'right';
+      ctx.fillText(wdl(r), W - PAD - 190, mid + 1); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
       const d = night.rule === 'wins' ? r.w : r.delta;
       const text = night.rule === 'wins' ? `${r.w}W` : signed(r.delta);
-      chip(ctx, text, W - PAD - 20, y + rowH / 2, 30, d > 0 ? C.upWash : d < 0 ? C.downWash : '#eceae0', d > 0 ? C.up : d < 0 ? C.down : C.muted);
+      chip(ctx, text, W - PAD - 16, mid, Math.max(25, Math.round(30 * k)), d > 0 ? C.upWash : d < 0 ? C.downWash : '#eceae0', d > 0 ? C.up : d < 0 ? C.down : C.muted);
     });
 
     // footer
